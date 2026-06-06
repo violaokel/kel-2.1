@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Estoque (kel)",
+  "description": "Aplicativo móvel e web moderno para gerenciamento de estoque de merenda escolar, com sincronização offline/online, cadastro de cardápios, alertas e leitor de código de barras.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
