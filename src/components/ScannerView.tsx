@@ -205,8 +205,34 @@ export default function ScannerView({
     };
   }, []);
 
+  const playBeepSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        const audioCtx = new AudioContextClass();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880; // Crisp high success tone (880Hz)
+        gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        
+        oscillator.start();
+        setTimeout(() => {
+          oscillator.stop();
+          audioCtx.close();
+        }, 110);
+      }
+    } catch (e) {
+      console.warn("Dispositivo de som indisponivel no navegador:", e);
+    }
+  };
+
   // Handle scanned lookup code
   const handleBarcodeLookup = (code: string) => {
+    if (!code) return;
     setScannedCode(code);
     setScanStatus("searching");
     
@@ -214,6 +240,7 @@ export default function ScannerView({
     setTimeout(() => {
       const match = products.find(p => p.barcode === code);
       if (match) {
+        playBeepSound();
         setScannedProduct(match);
         setScanStatus("found");
         setSuccessAnimation(true);
@@ -305,6 +332,45 @@ export default function ScannerView({
                 <span>Leitura bem Sucedida!</span>
               </div>
             )}
+          </div>
+
+          {/* Manual Input field for physical barcode guns and manual typing */}
+          <div className="bg-slate-50 p-4 border border-gray-150 rounded-2xl space-y-2.5" id="manual-scan-box">
+            <label htmlFor="manual-sc-gun-input" className="block text-xs font-bold text-gray-750 uppercase tracking-wide">
+              🔌 Digitação Manual ou Leitor de Código de Barras (Pistola USB/Bluetooth)
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="manual-sc-gun-input"
+                type="text"
+                placeholder="Escaneie com a Pistola, ou digite o código..."
+                className="flex-1 px-3 py-2 bg-white border border-gray-255 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500 text-gray-800"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const code = e.currentTarget.value.trim();
+                    handleBarcodeLookup(code);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("manual-sc-gun-input") as HTMLInputElement;
+                  if (el && el.value.trim()) {
+                    handleBarcodeLookup(el.value.trim());
+                    el.value = "";
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+              >
+                Buscar
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 leading-normal">
+              * Ao interagir com um leitor de código de barras físico no computador ou celular, o leitor digita os números no campo focado e pressiona <b>Enter</b> automaticamente.
+            </p>
           </div>
 
           {/* Simulation triggers container */}

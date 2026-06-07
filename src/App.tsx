@@ -821,6 +821,48 @@ export default function App() {
     }, 150);
   };
 
+  const handleRegisterUser = async (newUsr: Omit<UserAccount, 'id'>) => {
+    try {
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUsr)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          setUserAccounts((prev) => {
+            const updated = [...prev, data.user];
+            localStorage.setItem("kel_user_accounts", JSON.stringify(updated));
+            return updated;
+          });
+          // Track and write audit
+          writeAuditLog(
+            data.user.username,
+            data.user.role,
+            "Autocadastro de Usuário",
+            `Novo colaborador "${data.user.name}" efetuou cadastro sob perfil "${data.user.role}".`
+          );
+        }
+      } else {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Erro ao registrar usuário.");
+      }
+    } catch (err: any) {
+      console.error("Falha ao registrar online, registrando offline:", err);
+      // Fallback local registration if server offline
+      const fresh: UserAccount = {
+        ...newUsr,
+        id: "usr-" + Date.now()
+      };
+      setUserAccounts((prev) => {
+        const updated = [...prev, fresh];
+        localStorage.setItem("kel_user_accounts", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
   const toggleDarkModeStyle = (val: boolean) => {
     setDarkMode(val);
     localStorage.setItem("kel_dark_mode", String(val));
@@ -832,7 +874,7 @@ export default function App() {
       <LoginView 
         onLoginSuccess={handleLogin} 
         users={userAccounts} 
-        onRegisterUser={handleAddUser}
+        onRegisterUser={handleRegisterUser}
       />
     );
   }
@@ -855,7 +897,7 @@ export default function App() {
               <span>Controle de Estoque</span>
               <span className="ml-1.5 text-xs text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md font-mono">kel</span>
             </h1>
-            <p className="text-[10px] text-gray-400 font-medium">Gestão Alimentar Escolar Municipal</p>
+            <p className="text-[10px] text-emerald-600 font-bold tracking-wide">(CAEF) Centro de Apoio ao Ensino Fundamental — Várzea Nova - BA</p>
           </div>
         </div>
 

@@ -502,21 +502,121 @@ async function startServer() {
     res.json(db);
   });
 
-  // Save complete synchronized state (sync push)
+  // Save complete synchronized state (sync push with smart non-destructive merging)
   app.post("/api/sync", async (req, res) => {
     const { products, schoolMenus, transactions, logs, userAccounts } = req.body;
     
     const db = await loadDbAsync();
     
-    // Simple reconciliation: merge arrays or replace (since local is often source-of-truth)
-    if (Array.isArray(products)) db.products = products;
-    if (Array.isArray(schoolMenus)) db.schoolMenus = schoolMenus;
-    if (Array.isArray(transactions)) db.transactions = transactions;
-    if (Array.isArray(logs)) db.logs = logs;
-    if (Array.isArray(userAccounts)) db.userAccounts = userAccounts;
+    // Merge Products by ID
+    if (Array.isArray(products)) {
+      const merged = [...db.products];
+      products.forEach((incoming: any) => {
+        const index = merged.findIndex((p: any) => p.id === incoming.id);
+        if (index > -1) {
+          merged[index] = { ...merged[index], ...incoming };
+        } else {
+          merged.push(incoming);
+        }
+      });
+      db.products = merged;
+    }
+
+    // Merge School Menus by ID
+    if (Array.isArray(schoolMenus)) {
+      const merged = [...db.schoolMenus];
+      schoolMenus.forEach((incoming: any) => {
+        const index = merged.findIndex((m: any) => m.id === incoming.id);
+        if (index > -1) {
+          merged[index] = { ...merged[index], ...incoming };
+        } else {
+          merged.push(incoming);
+        }
+      });
+      db.schoolMenus = merged;
+    }
+
+    // Merge Transactions by ID
+    if (Array.isArray(transactions)) {
+      const merged = [...db.transactions];
+      transactions.forEach((incoming: any) => {
+        const index = merged.findIndex((t: any) => t.id === incoming.id);
+        if (index > -1) {
+          merged[index] = { ...merged[index], ...incoming };
+        } else {
+          merged.push(incoming);
+        }
+      });
+      db.transactions = merged;
+    }
+
+    // Merge Logs by ID
+    if (Array.isArray(logs)) {
+      const merged = [...db.logs];
+      logs.forEach((incoming: any) => {
+        const index = merged.findIndex((l: any) => l.id === incoming.id);
+        if (index > -1) {
+          merged[index] = { ...merged[index], ...incoming };
+        } else {
+          merged.push(incoming);
+        }
+      });
+      db.logs = merged;
+    }
+
+    // Merge User Accounts by ID and Username to prevent landing-page register overwrites
+    if (Array.isArray(userAccounts)) {
+      const merged = [...db.userAccounts];
+      userAccounts.forEach((incoming: any) => {
+        const index = merged.findIndex((u: any) => 
+          u.id === incoming.id || 
+          (incoming.username && u.username.toLowerCase() === incoming.username.toLowerCase())
+        );
+        if (index > -1) {
+          merged[index] = { ...merged[index], ...incoming };
+        } else {
+          merged.push(incoming);
+        }
+      });
+      db.userAccounts = merged;
+    }
 
     await saveDbAsync(db);
     res.json({ success: true, timestamp: new Date().toISOString() });
+  });
+
+  // Dedicated single user self-registration API (prevents client state conflicts)
+  app.post("/api/register", async (req, res) => {
+    try {
+      const { name, username, password, role } = req.body;
+      if (!name || !username || !password || !role) {
+        return res.status(400).json({ error: "Preencha todos os campos obrigatórios." });
+      }
+
+      const db = await loadDbAsync();
+
+      // Check duplicant
+      const cleanUser = username.trim().toLowerCase();
+      const duplicate = db.userAccounts.find((u: any) => u.username.toLowerCase() === cleanUser);
+      if (duplicate || cleanUser === "violaokel@gmail.com") {
+        return res.status(400).json({ error: "Este e-mail ou nome de usuário já está associado a outra conta." });
+      }
+
+      const freshUser = {
+        id: "usr-" + Date.now(),
+        name: name.trim(),
+        username: cleanUser,
+        password,
+        role
+      };
+
+      db.userAccounts.push(freshUser);
+      await saveDbAsync(db);
+
+      res.json({ success: true, user: freshUser });
+    } catch (err: any) {
+      res.status(500).json({ error: "Erro interno ao cadastrar: " + (err.message || err) });
+    }
   });
 
   // Log individual events from clients
