@@ -443,19 +443,24 @@ export default function App() {
     currentMenus = menus, 
     currentTxs = transactions, 
     currentLogs = logs, 
-    currentUsers = userAccounts
+    currentUsers?: UserAccount[]
   ) => {
     try {
+      const payload: any = {
+        products: currentProds,
+        schoolMenus: currentMenus,
+        transactions: currentTxs,
+        logs: currentLogs
+      };
+
+      if (currentUsers !== undefined) {
+        payload.userAccounts = currentUsers;
+      }
+
       const res = await fetch("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          products: currentProds,
-          schoolMenus: currentMenus,
-          transactions: currentTxs,
-          logs: currentLogs,
-          userAccounts: currentUsers
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setSyncStatus({

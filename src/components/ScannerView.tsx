@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Image as ImageIcon
 } from "lucide-react";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 interface ScannerViewProps {
   products: Product[];
@@ -37,9 +38,12 @@ export default function ScannerView({
   const [scannedCode, setScannedCode] = useState("");
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState<boolean | null>(null);
+  const [cameraErrorDetail, setCameraErrorDetail] = useState<string | null>(null);
+  const [cameraKey, setCameraKey] = useState<number>(0);
   const [scanStatus, setScanStatus] = useState<"idle" | "searching" | "found" | "notFound">("idle");
   const [successAnimation, setSuccessAnimation] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
 
   // Form parameters for quickly scanned items
   const [fastQty, setFastQty] = useState<number>(5);
@@ -77,13 +81,14 @@ export default function ScannerView({
   const capturePhoto = () => {
     setCapturingState("capturing");
     setTimeout(() => {
-      if (videoRef.current && cameraPermissionGranted) {
+      const liveVideo = document.querySelector("#qr-reader video") as HTMLVideoElement;
+      if (liveVideo && cameraPermissionGranted) {
         const canvas = document.createElement("canvas");
-        canvas.width = videoRef.current.videoWidth || 640;
-        canvas.height = videoRef.current.videoHeight || 480;
+        canvas.width = liveVideo.videoWidth || 640;
+        canvas.height = liveVideo.videoHeight || 480;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL("image/jpeg");
           setWastePhoto(dataUrl);
           setCapturingState("success");
@@ -166,6 +171,7 @@ export default function ScannerView({
     setScannedProduct(null);
     setScannedCode("");
     setScanStatus("idle");
+    isProcessingRef.current = false; // RELEASE SCANNING LOCK
     setWasteChecklist([]);
     setWastePhoto(null);
     setWasteQty(1);
@@ -173,37 +179,90 @@ export default function ScannerView({
     setActiveSubTab("balance");
   };
 
-  // Start webcam feed for scanner representation
+  // Start real-time camera-based barcode scanning using Html5Qrcode
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    
+    let html5QrCode: Html5Qrcode | null = null;
+    let isMounted = true;
+
     async function startCamera() {
       try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment" } 
-          });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            setCameraPermissionGranted(true);
-          }
-        } else {
-          setCameraPermissionGranted(false);
+        console.log("[Leitor] Solicitando acesso ao sensor da câmera...");
+        // Delay slightly for DOM mounting security
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        if (!isMounted) return;
+
+        const container = document.getElementById("qr-reader");
+        if (!container) {
+          console.warn("[Leitor] Container visual 'qr-reader' não encontrado.");
+          return;
         }
-      } catch (err) {
-        console.warn("Camera stream blocked or unavailable:", err);
-        setCameraPermissionGranted(false);
+
+        html5QrCode = new Html5Qrcode("qr-reader");
+        
+        const config = {
+          fps: 15,
+          qrbox: (width: number, height: number) => {
+            // landscape EAN-13/EAN-8 horizontal detection area
+            const optimalWidth = Math.min(width * 0.82, 360);
+            const optimalHeight = Math.min(height * 0.45, 180);
+            return { width: Math.floor(optimalWidth), height: Math.floor(optimalHeight) };
+          },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39
+          ]
+        };
+
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText: string) => {
+            // Guard against duplicate reads while performing lookup / user input
+            if (isProcessingRef.current) {
+              return; 
+            }
+            console.log(`[Leitor] Código EAN/QR lido com sucesso: "${decodedText}"`);
+            handleBarcodeLookup(decodedText);
+          },
+          (errorMessage: string) => {
+            // Silent frame warning log - standard behavior as cameras capture 15fps
+          }
+        );
+
+        console.log("[Leitor] Fluxo da câmera ativado e escaneando códigos.");
+        if (isMounted) {
+          setCameraPermissionGranted(true);
+          setCameraErrorDetail(null);
+        }
+      } catch (err: any) {
+        console.error("[Leitor] Erro ao obter permissão da câmera ou iniciar transmissão:", err?.message || err);
+        if (isMounted) {
+          setCameraPermissionGranted(false);
+          setCameraErrorDetail(err?.message || String(err));
+        }
       }
     }
 
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      isMounted = false;
+      if (html5QrCode) {
+        html5QrCode.stop()
+          .then(() => {
+            console.log("[Leitor] Câmera fechada e canal liberado com sucesso.");
+          })
+          .catch((e: any) => {
+            console.warn("[Leitor] Aviso ao encerrar fluxo da câmera:", e?.message || e);
+          });
       }
     };
-  }, []);
+  }, [cameraKey]);
 
   const playBeepSound = () => {
     try {
@@ -226,26 +285,31 @@ export default function ScannerView({
         }, 110);
       }
     } catch (e) {
-      console.warn("Dispositivo de som indisponivel no navegador:", e);
+      console.warn("[Leitor] Dispositivo de áudio ocupado ou sem suporte no navegador:", e);
     }
   };
 
   // Handle scanned lookup code
   const handleBarcodeLookup = (code: string) => {
-    if (!code) return;
+    if (!code || isProcessingRef.current) return;
+    
+    isProcessingRef.current = true; // LOCK SCANNING
     setScannedCode(code);
     setScanStatus("searching");
+    console.log(`[Leitor] Iniciando busca do código: "${code}" no Supabase/DB local...`);
     
-    // Slight simulated reading delay to seem highly dynamic
+    // Slight delay to keep smooth user feedback loop
     setTimeout(() => {
       const match = products.find(p => p.barcode === code);
       if (match) {
+        console.log(`[Leitor] Produto localizado: "${match.name}" (Categoria: ${match.category})`);
         playBeepSound();
         setScannedProduct(match);
         setScanStatus("found");
         setSuccessAnimation(true);
         setTimeout(() => setSuccessAnimation(false), 800);
       } else {
+        console.warn(`[Leitor] Código "${code}" não corresponde a nenhum produto cadastrado no Supabase.`);
         setScannedProduct(null);
         setScanStatus("notFound");
       }
@@ -270,6 +334,7 @@ export default function ScannerView({
     setScannedProduct(null);
     setScannedCode("");
     setScanStatus("idle");
+    isProcessingRef.current = false; // RELEASE SCANNING LOCK
   };
 
   return (
@@ -295,24 +360,49 @@ export default function ScannerView({
 
           {/* Frame Container */}
           <div className="relative w-full aspect-video bg-gray-950 rounded-2xl overflow-hidden flex flex-col items-center justify-center border-4 border-slate-900">
-            {cameraPermissionGranted ? (
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                muted 
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-3">
-                <div className="p-3 bg-white/5 rounded-2xl">
-                  <Camera className="w-10 h-10 text-emerald-500 opacity-60" />
+            {/* Real scanner div targeting camera element injection */}
+            <div id="qr-reader" className="absolute inset-0 w-full h-full object-cover z-0" />
+
+            {cameraPermissionGranted === false && (
+              <div className="absolute inset-0 bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center space-y-2.5 z-10">
+                <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
+                  <AlertTriangle className="w-7 h-7 text-rose-500 animate-pulse" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-white text-xs font-semibold">Usando Modo Simulação de Scanner</p>
-                  <p className="text-[10px] text-gray-400 max-w-xs leading-relaxed">
-                    Acesso à webcam limitado pelo iFrame seguro, mas você pode usar os botões de simulação abaixo com produtos do estoque.
+                  <p className="text-white text-xs font-bold font-sans">Acesso à Câmera Bloqueado / Negado</p>
+                  <p className="text-[10px] text-gray-300 max-w-sm leading-relaxed font-sans px-3">
+                    Navegadores limitam o uso da câmera dentro de iFrames de pré-visualização. Para escanear com a câmera física do seu smartphone ou PC, abra o sistema standalone.
                   </p>
+                  {cameraErrorDetail && (
+                    <div className="mt-1">
+                      <span className="inline-block text-[9px] bg-slate-900 text-rose-300 font-mono px-2 py-0.5 rounded-md max-w-[280px] truncate">
+                        Motivo: {cameraErrorDetail}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.open(window.location.href, "_blank");
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🔗 Abrir em Nova Aba</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraPermissionGranted(null);
+                      setCameraErrorDetail(null);
+                      setCameraKey(prev => prev + 1);
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-white border border-slate-700 font-bold text-[10px] rounded-lg transition cursor-pointer"
+                  >
+                    🔄 Tentar Novamente
+                  </button>
                 </div>
               </div>
             )}
@@ -547,7 +637,7 @@ export default function ScannerView({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => { setScanStatus("idle"); setScannedProduct(null); }}
+                      onClick={() => { setScanStatus("idle"); setScannedProduct(null); isProcessingRef.current = false; }}
                       className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-gray-650 rounded-xl text-xs font-bold cursor-pointer"
                     >
                       Descartar Scan
@@ -711,7 +801,7 @@ export default function ScannerView({
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => { setScanStatus("idle"); setScannedProduct(null); }}
+                      onClick={() => { setScanStatus("idle"); setScannedProduct(null); isProcessingRef.current = false; }}
                       className="flex-1 py-2 bg-slate-100 hover:bg-slate-205 text-gray-650 rounded-xl text-xs font-bold cursor-pointer"
                     >
                       Descartar Scan
@@ -759,7 +849,7 @@ export default function ScannerView({
               </div>
 
               <button
-                onClick={() => { setScanStatus("idle"); setScannedCode(""); }}
+                onClick={() => { setScanStatus("idle"); setScannedCode(""); isProcessingRef.current = false; }}
                 className="w-full py-1.5 bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-200"
               >
                 Tentar outro Código
