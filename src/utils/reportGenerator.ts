@@ -4,6 +4,8 @@
  */
 
 import { Product, StockTransaction, SchoolMenu } from "../types";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 /**
  * Download static text as file
@@ -105,161 +107,95 @@ export function exportTransactionsCSV(transactions: StockTransaction[]) {
 }
 
 /**
- * Opens a beautiful styled layout optimized for browser printing (PDF generator)
+ * Generates a beautiful PDF report for download using jsPDF and jspdf-autotable
  */
 export function printReport(title: string, subtitle: string, headers: string[], rows: string[][]) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    alert("Por favor, habilite popups para visualizar o relatório para impressão.");
-    return;
-  }
-
+  const doc = new jsPDF();
   const currentDate = new Date().toLocaleString("pt-BR");
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="UTF-8">
-      <title>${title}</title>
-      <style>
-        body {
-          font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-          color: #333;
-          margin: 30px;
-          line-height: 1.4;
-        }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 2px solid #047857;
-          padding-bottom: 15px;
-          margin-bottom: 25px;
-        }
-        .logo-title {
-          display: flex;
-          flex-direction: column;
-        }
-        .logo-title h1 {
-          margin: 0;
-          font-size: 24px;
-          color: #047857;
-        }
-        .logo-title p {
-          margin: 3px 0 0 0;
-          color: #666;
-          font-size: 14px;
-        }
-        .meta-info {
-          text-align: right;
-          font-size: 12px;
-          color: #777;
-        }
-        h2 {
-          font-size: 18px;
-          margin-top: 0;
-          margin-bottom: 10px;
-          color: #1f2937;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 15px;
-          font-size: 13px;
-        }
-        th {
-          background-color: #f3f4f6;
-          color: #111827;
-          font-weight: bold;
-          text-align: left;
-          padding: 10px;
-          border-bottom: 1px solid #d1d5db;
-        }
-        td {
-          padding: 10px;
-          border-bottom: 1px solid #e5e7eb;
-          color: #374151;
-        }
-        tr:nth-child(even) {
-          background-color: #f9fafb;
-        }
-        .footer {
-          margin-top: 40px;
-          border-top: 1px solid #e5e7eb;
-          padding-top: 15px;
-          display: flex;
-          justify-content: space-between;
-          font-size: 11px;
-          color: #9ca3af;
-        }
-        .badge {
-          display: inline-block;
-          padding: 3px 6px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: bold;
-        }
-        .badge-entrada { background-color: #d1fae5; color: #065f46; }
-        .badge-saida { background-color: #fee2e2; color: #991b1b; }
-        .badge-desper { background-color: #fef3c7; color: #92400e; }
-        @media print {
-          body { margin: 15px; }
-          .header { border-bottom-color: #000; }
-          .no-print { display: none; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div class="logo-title">
-          <h1>Controle de Estoque (kel)</h1>
-          <p>${subtitle}</p>
-        </div>
-        <div class="meta-info">
-          Gerado em: ${currentDate}<br>
-          (CAEF) Centro de Apoio ao Ensino Fundamental
-        </div>
-      </div>
-      
-      <h2>${title}</h2>
-      
-      <table>
-        <thead>
-          <tr>
-            ${headers.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map(row => `
-            <tr>
-              ${row.map(cell => {
-                if (cell === "ENTRADA") return `<td><span class="badge badge-entrada">ENTRADA</span></td>`;
-                if (cell === "SAIDA") return `<td><span class="badge badge-saida">SAÍDA</span></td>`;
-                if (cell === "DESPERDÍCIO" || cell === "DESPERDICIO") return `<td><span class="badge badge-desper">DESPERDÍCIO</span></td>`;
-                return `<td>${cell}</td>`;
-              }).join("")}
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-      
-      <div class="footer">
-        <span>Sistema de Abastecimento Escolar (kel) - Perfil Administrador</span>
-        <span>Rubrica de Recebimento de Carga: __________________________________</span>
-      </div>
+  // Title / Header
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(4, 120, 87); // emerald-700
+  doc.text("Controle de Estoque (kel)", 14, 20);
 
-      <script>
-        window.onload = function() {
-          // Automatic trigger print setup
-          setTimeout(function() {
-            window.print();
-          }, 300);
-        };
-      </script>
-    </body>
-    </html>
-  `);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text(subtitle, 14, 26);
 
-  printWindow.document.close();
+  // Metadata Info
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105); // slate-600
+  doc.text(`Gerado em: ${currentDate}`, 125, 20);
+  doc.text("(CAEF) Apoio ao Ensino Fundamental", 125, 25);
+
+  // Divider line
+  doc.setDrawColor(4, 120, 87);
+  doc.setLineWidth(0.5);
+  doc.line(14, 29, 196, 29);
+
+  // Section Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(30, 41, 59); // slate-800
+  doc.text(title, 14, 37);
+
+  // Generate Table
+  autoTable(doc, {
+    startY: 42,
+    head: [headers],
+    body: rows,
+    theme: "striped",
+    headStyles: {
+      fillColor: [4, 120, 87], // emerald-700
+      textColor: [255, 255, 255],
+      fontSize: 8,
+      fontStyle: "bold"
+    },
+    bodyStyles: {
+      fontSize: 7.5,
+      textColor: [51, 65, 85] // slate-700
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252] // slate-50
+    },
+    margin: { top: 40, bottom: 40, left: 14, right: 14 },
+    didDrawCell: (data) => {
+      // Keep colors elegant and standard
+    }
+  });
+
+  // Footer & Signatures
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    const footerY = 285;
+
+    // Bottom divider line
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.5);
+    doc.line(14, footerY - 12, 196, footerY - 12);
+
+    // Footer text
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text("Sistema de Abastecimento Escolar (kel) - Perfil Administrador", 14, footerY - 5);
+    doc.text(`Página ${i} de ${pageCount}`, 175, footerY - 5);
+
+    // Draw signature line on the last page only
+    if (i === pageCount) {
+      const sigY = footerY - 18;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text("Responsável: ____________________________________________", 14, sigY);
+      doc.text("Visto: ________________________", 145, sigY);
+    }
+  }
+
+  // Save / Trigger Download
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 30);
+  doc.save(`relatorio-${cleanTitle}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }

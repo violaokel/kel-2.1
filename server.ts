@@ -12,9 +12,10 @@ import { createClient } from "@supabase/supabase-js";
 import "dotenv/config";
 
 // Initialize Supabase Client
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://jeiszujaheqxaztrilsf.supabase.co";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "sb_publishable_S-gpNu2EHnYr3VjVDVgVpw_aB1KSf-N";
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const isSupabaseConfigured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 
 interface ServerDatabase {
@@ -363,13 +364,20 @@ function saveDb(data: ServerDatabase) {
 
 // Supabase Async loading of the database state
 async function loadDbAsync(): Promise<ServerDatabase> {
+  if (!supabase) {
+    return loadDb();
+  }
   try {
     const { data, error } = await supabase
       .from("kel_app_store")
       .select("*");
 
     if (error) {
-      console.warn("[Supabase] Não foi possível carregar de 'kel_app_store' (Provavelmente tabela não criada). Usando local backup.", error.message);
+      if (error.message && error.message.includes("fetch failed")) {
+        console.log("[Supabase] Nota: Conexão offline ou projeto indisponível. Operando localmente.");
+      } else {
+        console.log("[Supabase] Nota: Tabela 'kel_app_store' não localizada ou não criada no Supabase. Operando localmente.", error.message);
+      }
       return loadDb();
     }
 
@@ -408,8 +416,8 @@ async function loadDbAsync(): Promise<ServerDatabase> {
     // Sync back to local backup file too
     saveDb(db);
     return db;
-  } catch (err) {
-    console.warn("[Supabase] Erro ao carregar Supabase. Carregando dados locais.", err);
+  } catch (err: any) {
+    console.log("[Supabase] Nota: Erro ao conectar ao Supabase (operando em modo offline local).");
     return loadDb();
   }
 }
@@ -418,6 +426,10 @@ async function loadDbAsync(): Promise<ServerDatabase> {
 async function saveDbAsync(data: ServerDatabase) {
   // Always commit local backup for reliability
   saveDb(data);
+
+  if (!supabase) {
+    return;
+  }
 
   try {
     const payloads = [
@@ -438,12 +450,12 @@ async function saveDbAsync(data: ServerDatabase) {
     const errors = results.filter(r => r.error);
 
     if (errors.length > 0) {
-      console.warn(`[Supabase] Gravação parcial concluída. ${errors.length} tabelas falharam ao sincronizar na nuvem. Usando local filesystem.`);
+      console.log(`[Supabase] Gravação local realizada. Sincronização em nuvem pendente.`);
     } else {
       console.log("[Supabase] Banco de dados totalmente sincronizado na nuvem com sucesso!");
     }
   } catch (err) {
-    console.warn("[Supabase] Exceção crítica ao persistir no Supabase. Gravado apenas no backup local.", err);
+    console.log("[Supabase] Nota: Conexão offline ou sem resposta do banco. Dados gravados localmente.");
   }
 }
 
@@ -463,6 +475,21 @@ async function startServer() {
 
   // Endpoints: Health Check
   app.get("/api/health", async (req, res) => {
+    if (!supabase) {
+      res.json({
+        status: "ok",
+        message: "Servidor de Sincronização Kel Online",
+        supabase: {
+          configured: false,
+          connected: false,
+          status: "Modo Local Offline",
+          table_active: false,
+          instructions: "O Supabase não está configurado. O sistema está salvando e operando localmente com total segurança."
+        }
+      });
+      return;
+    }
+
     let supabaseStatus = "Sincronizado e Ativo";
     let checkExplanation = "Tudo funcionando perfeitamente.";
     let tableExists = true;
@@ -488,6 +515,7 @@ async function startServer() {
       status: "ok",
       message: "Servidor de Sincronização Kel Online",
       supabase: {
+        configured: true,
         connected: true,
         status: supabaseStatus,
         table_active: tableExists,

@@ -36,8 +36,26 @@ export default function MenuView({
   onServeMenu,
   onDeleteMenu
 }: MenuViewProps) {
+  const getLocalDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const getLocalDisplayDate = () => {
+    const d = new Date();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${day}/${month}`;
+  };
+
+  const todayStr = getLocalDateString();
+  const displayTodayStr = getLocalDisplayDate();
+
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [activeDate, setActiveDate] = useState("2026-06-06"); // Today state mockup representation
+  const [activeDate, setActiveDate] = useState(todayStr); // Today state dynamic representation
   const [selectedMealTypeFilter, setSelectedMealTypeFilter] = useState<string>("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmServeId, setConfirmServeId] = useState<string | null>(null);
@@ -45,7 +63,7 @@ export default function MenuView({
   // Form Fields
   const [newMenuName, setNewMenuName] = useState("");
   const [newMealType, setNewMealType] = useState<MealType>("almoco");
-  const [newDate, setNewDate] = useState("2026-06-06");
+  const [newDate, setNewDate] = useState(todayStr);
   const [newPortionsCount, setNewPortionsCount] = useState<number>(100);
   const [selectedIngredients, setSelectedIngredients] = useState<Array<{productId: string, quantityPerPortion: number}>>([]);
 
@@ -104,7 +122,7 @@ export default function MenuView({
 
     // Reset fields
     setNewMenuName("");
-    setNewDate("2026-06-06");
+    setNewDate(todayStr);
     setNewPortionsCount(100);
     setSelectedIngredients([]);
     setIsAddOpen(false);
@@ -175,12 +193,12 @@ export default function MenuView({
               className="px-2 py-1 bg-slate-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700"
             />
             <button 
-              onClick={() => setActiveDate("2026-06-06")} // Mock today
+              onClick={() => setActiveDate(todayStr)}
               className={`px-2.5 py-1 text-xs rounded-lg border font-semibold ${
-                activeDate === "2026-06-06" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200"
+                activeDate === todayStr ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200"
               }`}
             >
-              Hoje (06/06)
+              Hoje ({displayTodayStr})
             </button>
             <button 
               onClick={() => setActiveDate("")}

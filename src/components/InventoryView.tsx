@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Product, SchoolMenu, StockTransaction, UserProfile } from "../types";
+import { Product, SchoolMenu, StockTransaction, UserProfile, ActivityLog } from "../types";
 import { 
   Plus, 
   Search, 
@@ -27,7 +27,8 @@ import {
   exportProductsCSV, 
   exportAlertsCSV, 
   printReport, 
-  formatBRDate 
+  formatBRDate,
+  formatBRDateTime
 } from "../utils/reportGenerator";
 
 interface InventoryViewProps {
@@ -35,6 +36,7 @@ interface InventoryViewProps {
   currentUser: UserProfile;
   transactions: StockTransaction[];
   menus: SchoolMenu[];
+  logs?: ActivityLog[];
   onAddProduct: (prod: Omit<Product, 'id' | 'wastage'>) => void;
   onUpdateQuantity: (productId: string, quantityChange: number, type: 'entrada' | 'saida' | 'desperdicio', notes: string) => void;
   onDeleteProduct: (productId: string) => void;
@@ -45,6 +47,7 @@ export default function InventoryView({
   currentUser,
   transactions,
   menus,
+  logs = [],
   onAddProduct,
   onUpdateQuantity,
   onDeleteProduct
@@ -88,8 +91,11 @@ export default function InventoryView({
 
   // PDF Customs Report Generation Modal State
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportType, setReportType] = useState<'inventory' | 'transactions' | 'logs'>('inventory');
   const [reportCategory, setReportCategory] = useState("all");
   const [reportStatus, setReportStatus] = useState("all");
+  const [reportTxType, setReportTxType] = useState<string>('all');
+  const [reportLogRole, setReportLogRole] = useState<string>('all');
 
   const fetchAISuggestion = async (prod: Product) => {
     setAiProductFocus(prod);
@@ -232,8 +238,21 @@ export default function InventoryView({
     );
   };
 
+  // Filter transactions list for custom PDF report modal
+  const reportFilteredTransactions = transactions.filter((t) => {
+    if (reportTxType === "all") return true;
+    return t.type === reportTxType;
+  });
+
+  // Filter logs list for custom PDF report modal
+  const reportFilteredLogs = logs.filter((l) => {
+    if (reportLogRole === "all") return true;
+    return l.role === reportLogRole;
+  });
+
   // Sync page filters to report modal and open it
   const openReportWizard = () => {
+    setReportType("inventory");
     setReportCategory(selectedCategory);
     setReportStatus(selectedStatus);
     setIsReportModalOpen(true);
@@ -241,47 +260,98 @@ export default function InventoryView({
 
   // Custom PDF report printer with specified filters in the Modal
   const triggerCustomPdfReport = () => {
-    const headers = [
-      "Produto", "Código Barras", "Categoria", "Estoque Atual", 
-      "Mínimo Segurança", "Validade", "Fornecedor", "Localização"
-    ];
-    const rows = reportFilteredProducts.map(p => {
-      const today = new Date("2026-06-06");
-      const isExpired = new Date(p.expiryDate) < today;
-      const diffDays = Math.ceil((new Date(p.expiryDate).getTime() - today.getTime()) / (1000 * 3600 * 24));
-      
-      let valStatus = formatBRDate(p.expiryDate);
-      if (isExpired) {
-        valStatus += " (VENCIDO)";
-      } else if (diffDays <= 30) {
-        valStatus += ` (Vence em ${diffDays}d)`;
-      }
-
-      return [
-        p.name, 
-        p.barcode || "-", 
-        p.category, 
-        `${p.quantity} ${p.unit}`, 
-        `${p.minQuantity} ${p.unit}`, 
-        valStatus, 
-        p.supplier, 
-        p.location
+    if (reportType === 'inventory') {
+      const headers = [
+        "Produto", "Código Barras", "Categoria", "Estoque Atual", 
+        "Mínimo Segurança", "Validade", "Fornecedor", "Localização"
       ];
-    });
+      const rows = reportFilteredProducts.map(p => {
+        const today = new Date("2026-06-06");
+        const isExpired = new Date(p.expiryDate) < today;
+        const diffDays = Math.ceil((new Date(p.expiryDate).getTime() - today.getTime()) / (1000 * 3600 * 24));
+        
+        let valStatus = formatBRDate(p.expiryDate);
+        if (isExpired) {
+          valStatus += " (VENCIDO)";
+        } else if (diffDays <= 30) {
+          valStatus += ` (Vence em ${diffDays}d)`;
+        }
 
-    const catLabel = reportCategory === "all" ? "Todas as Categorias" : reportCategory;
-    const statusLabel = 
-      reportStatus === "all" ? "Todos os Status de Validade" :
-      reportStatus === "low" ? "Alerta de Estoque Baixo" :
-      reportStatus === "expiring" ? "Alerta de Vencimento de 30 dias" :
-      reportStatus === "expired" ? "Alerta de Produtos Vencidos" : "Insumos com Estoque Adequado";
+        return [
+          p.name, 
+          p.barcode || "-", 
+          p.category, 
+          `${p.quantity} ${p.unit}`, 
+          `${p.minQuantity} ${p.unit}`, 
+          valStatus, 
+          p.supplier, 
+          p.location
+        ];
+      });
 
-    printReport(
-      `Relatório de Inventário - ${catLabel}`, 
-      `Filtro aplicado: ${statusLabel} (${reportFilteredProducts.length} itens listados)`, 
-      headers, 
-      rows
-    );
+      const catLabel = reportCategory === "all" ? "Todas as Categorias" : reportCategory;
+      const statusLabel = 
+        reportStatus === "all" ? "Todos os Status de Validade" :
+        reportStatus === "low" ? "Alerta de Estoque Baixo" :
+        reportStatus === "expiring" ? "Alerta de Vencimento de 30 dias" :
+        reportStatus === "expired" ? "Alerta de Produtos Vencidos" : "Insumos com Estoque Adequado";
+
+      printReport(
+        `Relatório de Inventário - ${catLabel}`, 
+        `Filtro aplicado: ${statusLabel} (${reportFilteredProducts.length} itens listados)`, 
+        headers, 
+        rows
+      );
+    } else if (reportType === 'transactions') {
+      const headers = [
+        "Data/Hora", "Produto", "Movimentação", "Quantidade", "Unidade", "Responsável", "Observações"
+      ];
+      const rows = reportFilteredTransactions.map(t => {
+        return [
+          formatBRDateTime(t.date),
+          t.productName,
+          t.type.toUpperCase(),
+          String(t.quantity),
+          t.unit,
+          t.user,
+          t.notes || "-"
+        ];
+      });
+
+      const txLabel = 
+        reportTxType === "all" ? "Todos os Fluxos" :
+        reportTxType === "entrada" ? "Apenas Entradas" :
+        reportTxType === "saida" ? "Apenas Saídas" : "Apenas Desperdícios/Perdas";
+
+      printReport(
+        `Prestação de Contas - Movimentações de Estoque`,
+        `Fluxo de Carga: ${txLabel} (${reportFilteredTransactions.length} registros listados)`,
+        headers,
+        rows
+      );
+    } else if (reportType === 'logs') {
+      const headers = [
+        "Data/Hora", "Usuário", "Perfil/Cargo", "Ação Executada", "Detalhes do Evento"
+      ];
+      const rows = reportFilteredLogs.map(l => {
+        return [
+          formatBRDateTime(l.timestamp),
+          l.user,
+          l.role,
+          l.action,
+          l.details
+        ];
+      });
+
+      const roleLabel = reportLogRole === "all" ? "Todos os Perfis" : reportLogRole;
+
+      printReport(
+        `Prestação de Contas - Auditoria e Logs de Atividades`,
+        `Operador Responsável: ${roleLabel} (${reportFilteredLogs.length} eventos registrados)`,
+        headers,
+        rows
+      );
+    }
   };
 
   return (
@@ -976,62 +1046,157 @@ export default function InventoryView({
               </div>
               <div>
                 <h3 className="font-extrabold text-gray-900 text-base">📋 Emitir Relatório PDF</h3>
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Configuração de filtros de estoque</p>
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Configuração de prestação de contas</p>
               </div>
             </div>
 
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed text-left">
-              Personalize o relatório de inventário definindo qual categoria e status de validade deseja compilar na folha oficial de prestação de contas.
+            <p className="text-xs text-gray-500 mb-3 leading-relaxed text-left">
+              Selecione o tipo de relatório oficial que deseja compilar e exportar em formato PDF para fins de prestação de contas.
             </p>
 
-            <div className="space-y-4" id="form-report-wizard">
-              {/* Category selector */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Filtrar por Categoria</label>
-                <select
-                  value={reportCategory}
-                  onChange={(e) => setReportCategory(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
-                >
-                  <option value="all">📁 Todas as Categorias</option>
-                  <option value="Grãos e Cereais">Grãos e Cereais</option>
-                  <option value="Carnes e Frios">Carnes e Frios</option>
-                  <option value="Laticínios">Laticínios</option>
-                  <option value="Hortifrúti">Hortifrúti</option>
-                  <option value="Óleos e Gorduras">Óleos e Gorduras</option>
-                  <option value="Enlatados">Enlatados</option>
-                  <option value="Outros">Outros</option>
-                </select>
-              </div>
+            {/* Tab Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-xl gap-1 mb-4">
+              <button
+                type="button"
+                onClick={() => setReportType('inventory')}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                  reportType === 'inventory' ? 'bg-white text-gray-800 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Insumos
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser?.role === 'Administrador') {
+                    setReportType('transactions');
+                  }
+                }}
+                disabled={currentUser?.role !== 'Administrador'}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-0.5 ${
+                  currentUser?.role !== 'Administrador' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                } ${
+                  reportType === 'transactions' ? 'bg-white text-gray-800 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title={currentUser?.role !== 'Administrador' ? "Apenas para Administradores" : "Exportar Movimentações"}
+              >
+                Movimentações
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser?.role === 'Administrador') {
+                    setReportType('logs');
+                  }
+                }}
+                disabled={currentUser?.role !== 'Administrador'}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-0.5 ${
+                  currentUser?.role !== 'Administrador' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                } ${
+                  reportType === 'logs' ? 'bg-white text-gray-800 shadow-xs' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title={currentUser?.role !== 'Administrador' ? "Apenas para Administradores" : "Exportar Auditoria de Logs"}
+              >
+                Logs
+              </button>
+            </div>
 
-              {/* Status de Validade selector */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Status de Validade & Consumo</label>
-                <select
-                  value={reportStatus}
-                  onChange={(e) => setReportStatus(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
-                >
-                  <option value="all">📦 Todos os Insumos (Resumo Completo)</option>
-                  <option value="expired">🔴 Somente Insumos VENCIDOS</option>
-                  <option value="expiring">⏰ Vencendo em até 30 dias (Alerta Validade)</option>
-                  <option value="low">📉 Somente Estoque Baixo (Alerta Reposição)</option>
-                  <option value="regular">🟢 Estoque Adequado & Dentro do Prazo</option>
-                </select>
-              </div>
+            <div className="space-y-4" id="form-report-wizard">
+              {reportType === 'inventory' && (
+                <>
+                  {/* Category selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Filtrar por Categoria</label>
+                    <select
+                      value={reportCategory}
+                      onChange={(e) => setReportCategory(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
+                    >
+                      <option value="all">📁 Todas as Categorias</option>
+                      <option value="Grãos e Cereais">Grãos e Cereais</option>
+                      <option value="Carnes e Frios">Carnes e Frios</option>
+                      <option value="Laticínios">Laticínios</option>
+                      <option value="Hortifrúti">Hortifrúti</option>
+                      <option value="Óleos e Gorduras">Óleos e Gorduras</option>
+                      <option value="Enlatados">Enlatados</option>
+                      <option value="Outros">Outros</option>
+                    </select>
+                  </div>
+
+                  {/* Status de Validade selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Status de Validade & Consumo</label>
+                    <select
+                      value={reportStatus}
+                      onChange={(e) => setReportStatus(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
+                    >
+                      <option value="all">📦 Todos os Insumos (Resumo Completo)</option>
+                      <option value="expired">🔴 Somente Insumos VENCIDOS</option>
+                      <option value="expiring">⏰ Vencendo em até 30 dias (Alerta Validade)</option>
+                      <option value="low">📉 Somente Estoque Baixo (Alerta Reposição)</option>
+                      <option value="regular">🟢 Estoque Adequado & Dentro do Prazo</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {reportType === 'transactions' && (
+                <>
+                  {/* Fluxo selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Filtrar por Fluxo de Estoque</label>
+                    <select
+                      value={reportTxType}
+                      onChange={(e) => setReportTxType(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
+                    >
+                      <option value="all">🔄 Todas as Movimentações</option>
+                      <option value="entrada">📥 Apenas Entradas de Insumos</option>
+                      <option value="saida">📤 Apenas Saídas / Consumo</option>
+                      <option value="desperdicio">⚠️ Apenas Desperdícios / Descartes</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {reportType === 'logs' && (
+                <>
+                  {/* Operator / Role selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Filtrar por Perfil de Operador</label>
+                    <select
+                      value={reportLogRole}
+                      onChange={(e) => setReportLogRole(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer font-sans"
+                    >
+                      <option value="all">👥 Todos os Cargos/Operadores</option>
+                      <option value="Administrador">Administrador</option>
+                      <option value="Chefe de Almoxarifado">Chefe de Almoxarifado</option>
+                      <option value="Coordenadora da Merenda Escolar">Coordenadora da Merenda Escolar</option>
+                      <option value="Nutricionista">Nutricionista</option>
+                    </select>
+                  </div>
+                </>
+              )}
 
               {/* Live Preview Summary card */}
               <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Resumo de Impressão</span>
                 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600">Itens contemplados na folha:</span>
+                  <span className="text-xs text-gray-650">Registros contemplados:</span>
                   <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
-                    reportFilteredProducts.length > 0 
+                    (reportType === 'inventory' ? reportFilteredProducts.length : reportType === 'transactions' ? reportFilteredTransactions.length : reportFilteredLogs.length) > 0 
                       ? "bg-emerald-100 text-emerald-800" 
                       : "bg-rose-100 text-rose-800"
                   }`}>
-                    {reportFilteredProducts.length} {reportFilteredProducts.length === 1 ? "produto" : "produtos"}
+                    {reportType === 'inventory' 
+                      ? `${reportFilteredProducts.length} ${reportFilteredProducts.length === 1 ? "produto" : "produtos"}` 
+                      : reportType === 'transactions'
+                      ? `${reportFilteredTransactions.length} ${reportFilteredTransactions.length === 1 ? "movimentação" : "movimentações"}`
+                      : `${reportFilteredLogs.length} ${reportFilteredLogs.length === 1 ? "evento" : "eventos"}`
+                    }
                   </span>
                 </div>
 
@@ -1055,7 +1220,9 @@ export default function InventoryView({
                     triggerCustomPdfReport();
                     setIsReportModalOpen(false);
                   }}
-                  disabled={reportFilteredProducts.length === 0}
+                  disabled={
+                    (reportType === 'inventory' ? reportFilteredProducts.length : reportType === 'transactions' ? reportFilteredTransactions.length : reportFilteredLogs.length) === 0
+                  }
                   className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow-sm flex items-center justify-center space-x-1 cursor-pointer"
                 >
                   <FileText className="w-4 h-4" />

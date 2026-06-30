@@ -1054,6 +1054,7 @@ export default function App() {
               currentUser={currentUser}
               transactions={transactions}
               menus={menus}
+              logs={logs}
               onAddProduct={handleAddProduct}
               onUpdateQuantity={handleUpdateProductQuantity}
               onDeleteProduct={handleDeleteProduct}

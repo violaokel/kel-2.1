@@ -178,15 +178,29 @@ export default function AuditView({
                 <div className="flex items-center justify-between border-b border-gray-55 pb-2">
                   <span className="text-xs text-gray-600 font-semibold">Status do Banco:</span>
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                    supabaseStatus.table_active 
-                      ? "bg-emerald-100 text-emerald-800" 
-                      : "bg-amber-150 text-amber-900"
+                    supabaseStatus.configured === false
+                      ? "bg-slate-100 text-slate-700"
+                      : supabaseStatus.table_active 
+                        ? "bg-emerald-100 text-emerald-800" 
+                        : "bg-amber-150 text-amber-900"
                   }`}>
                     {supabaseStatus.status}
                   </span>
                 </div>
 
-                {!supabaseStatus.table_active && (
+                {supabaseStatus.configured === false && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left space-y-1">
+                    <span className="text-[10px] font-bold text-slate-700 block">📦 Armazenamento Local Seguro</span>
+                    <p className="text-[10px] text-gray-550 leading-normal">
+                      O sistema está salvando e operando de forma 100% autônoma e segura no banco de dados local do servidor.
+                      Para habilitar a sincronização automática e backup em tempo real na nuvem do seu próprio projeto Supabase, configure as credenciais
+                      <code className="bg-slate-100 text-slate-800 px-1 py-0.2 rounded font-mono text-[9px] mx-1">SUPABASE_URL</code> e
+                      <code className="bg-slate-100 text-slate-800 px-1 py-0.2 rounded font-mono text-[9px] mx-1">SUPABASE_ANON_KEY</code> nas variáveis de ambiente do AI Studio.
+                    </p>
+                  </div>
+                )}
+
+                {supabaseStatus.configured !== false && !supabaseStatus.table_active && (
                   <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2 text-left">
                     <span className="text-[10px] font-bold text-amber-800 block">⚠️ Configuração SQL Pendente:</span>
                     <p className="text-[10px] text-gray-650 leading-normal">
@@ -207,7 +221,7 @@ export default function AuditView({
                   </div>
                 )}
 
-                {supabaseStatus.table_active && (
+                {supabaseStatus.configured !== false && supabaseStatus.table_active && (
                   <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl text-left">
                     <span className="text-[10px] font-bold text-emerald-800 block">✓ Banco de Dados Conectado</span>
                     <p className="text-[10px] text-gray-500 mt-1 leading-normal">
