@@ -12,6 +12,7 @@ import ScannerView from "./components/ScannerView";
 import AuditView from "./components/AuditView";
 import LoginView from "./components/LoginView";
 import UserManagementView from "./components/UserManagementView";
+import { getApiUrl } from "./utils/api";
 import { 
   LayoutDashboard, 
   Package, 
@@ -405,7 +406,7 @@ export default function App() {
   // Try to sync with server
   const pullDataFromServer = async () => {
     try {
-      const res = await fetch("/api/data");
+      const res = await fetch(getApiUrl() + "/api/data");
       if (res.ok) {
         const cloudData = await res.json();
         
@@ -457,7 +458,7 @@ export default function App() {
         payload.userAccounts = currentUsers;
       }
 
-      const res = await fetch("/api/sync", {
+      const res = await fetch(getApiUrl() + "/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -591,7 +592,7 @@ export default function App() {
     });
 
     // Also push singly if server ready
-    fetch("/api/logs", {
+    fetch(getApiUrl() + "/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newLog)
@@ -828,7 +829,7 @@ export default function App() {
 
   const handleRegisterUser = async (newUsr: Omit<UserAccount, 'id'>) => {
     try {
-      const res = await fetch("/api/register", {
+      const res = await fetch(getApiUrl() + "/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newUsr)

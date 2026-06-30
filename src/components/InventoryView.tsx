@@ -30,6 +30,7 @@ import {
   formatBRDate,
   formatBRDateTime
 } from "../utils/reportGenerator";
+import { getApiUrl } from "../utils/api";
 
 interface InventoryViewProps {
   products: Product[];
@@ -107,7 +108,7 @@ export default function InventoryView({
       const prodTransactions = transactions.filter(t => t.productId === prod.id).slice(0, 50);
       const prodMenus = menus.filter(m => m.ingredients.some(i => i.productId === prod.id));
 
-      const response = await fetch("/api/gemini/suggest-purchase", {
+      const response = await fetch(getApiUrl() + "/api/gemini/suggest-purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -21,6 +21,7 @@ import {
   Award
 } from "lucide-react";
 import { downloadCSV, formatBRDateTime } from "../utils/reportGenerator";
+import { getApiUrl } from "../utils/api";
 
 interface AuditViewProps {
   logs: ActivityLog[];
@@ -53,7 +54,7 @@ export default function AuditView({
   const [loadingHealth, setLoadingHealth] = useState(true);
 
   React.useEffect(() => {
-    fetch("/api/health")
+    fetch(getApiUrl() + "/api/health")
       .then(res => res.json())
       .then(data => {
         setSupabaseStatus(data.supabase);
