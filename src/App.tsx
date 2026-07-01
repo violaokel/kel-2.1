@@ -335,6 +335,7 @@ export default function App() {
     lastSyncedAt: new Date().toISOString()
   });
 
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
   // Pre-load saved or default data from local storage, then reconcile online database
@@ -405,26 +406,53 @@ export default function App() {
 
   // Try to sync with server
   const pullDataFromServer = async () => {
+    setIsSyncing(true);
     try {
       const res = await fetch(getApiUrl() + "/api/data");
       if (res.ok) {
         const cloudData = await res.json();
         
-        // Simple merge fallback: Cloud wins or joins
+        // Simple merge fallback using functional updates to prevent stale states
+        // and only update when actual differences exist (prevents losing input focus during typing)
         if (cloudData.products && cloudData.products.length > 0) {
-          setProducts(cloudData.products);
+          setProducts(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(cloudData.products)) {
+              return cloudData.products;
+            }
+            return prev;
+          });
         }
         if (cloudData.schoolMenus && cloudData.schoolMenus.length > 0) {
-          setMenus(cloudData.schoolMenus);
+          setMenus(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(cloudData.schoolMenus)) {
+              return cloudData.schoolMenus;
+            }
+            return prev;
+          });
         }
         if (cloudData.transactions && cloudData.transactions.length > 0) {
-          setTransactions(cloudData.transactions);
+          setTransactions(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(cloudData.transactions)) {
+              return cloudData.transactions;
+            }
+            return prev;
+          });
         }
         if (cloudData.userAccounts && cloudData.userAccounts.length > 0) {
-          setUserAccounts(cloudData.userAccounts);
+          setUserAccounts(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(cloudData.userAccounts)) {
+              return cloudData.userAccounts;
+            }
+            return prev;
+          });
         }
         if (cloudData.logs && cloudData.logs.length > 0) {
-          setLogs(cloudData.logs);
+          setLogs(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(cloudData.logs)) {
+              return cloudData.logs;
+            }
+            return prev;
+          });
         }
 
         setSyncStatus({
@@ -436,8 +464,22 @@ export default function App() {
     } catch (err) {
       console.warn("Utilizando banco offline integrado no navegador.", err);
       setSyncStatus(prev => ({ ...prev, isOnline: false }));
+    } finally {
+      setIsSyncing(false);
     }
   };
+
+  // Real-time auto-synchronization polling: keep multiple users/devices synced
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    // Fetch new updates from server every 8 seconds automatically
+    const syncInterval = setInterval(() => {
+      pullDataFromServer();
+    }, 8000);
+
+    return () => clearInterval(syncInterval);
+  }, [isInitialized]);
 
   const pushDataToServer = async (
     currentProds = products, 
@@ -446,6 +488,7 @@ export default function App() {
     currentLogs = logs, 
     currentUsers?: UserAccount[]
   ) => {
+    setIsSyncing(true);
     try {
       const payload: any = {
         products: currentProds,
@@ -478,6 +521,8 @@ export default function App() {
         isOnline: false,
         pendingSyncCount: prev.pendingSyncCount + 1
       }));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -916,9 +961,10 @@ export default function App() {
             className={`p-2 rounded-xl transition hover:bg-slate-100 ${
               syncStatus.isOnline ? "text-emerald-600" : "text-amber-600"
             }`}
-            title="Sincronizar Cloud agora"
+            title={isSyncing ? "Sincronizando..." : "Sincronizar Cloud agora"}
+            disabled={isSyncing}
           >
-            <RefreshCw className={`w-4 h-4 ${!syncStatus.isOnline ? "animate-pulse" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : !syncStatus.isOnline ? "animate-pulse" : ""}`} />
           </button>
 
           <div className="hidden md:flex items-center space-x-2 py-1 px-3 bg-slate-100/75 dark:bg-slate-800/50 rounded-2xl text-xs font-semibold">

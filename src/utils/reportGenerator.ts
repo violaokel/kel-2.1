@@ -6,6 +6,9 @@
 import { Product, StockTransaction, SchoolMenu } from "../types";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 
 /**
  * Download static text as file
@@ -109,7 +112,7 @@ export function exportTransactionsCSV(transactions: StockTransaction[]) {
 /**
  * Generates a beautiful PDF report for download using jsPDF and jspdf-autotable
  */
-export function printReport(title: string, subtitle: string, headers: string[], rows: string[][]) {
+export async function printReport(title: string, subtitle: string, headers: string[], rows: string[][]) {
   const doc = new jsPDF();
   const currentDate = new Date().toLocaleString("pt-BR");
 
@@ -197,5 +200,36 @@ export function printReport(title: string, subtitle: string, headers: string[], 
 
   // Save / Trigger Download
   const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 30);
-  doc.save(`relatorio-${cleanTitle}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  const filename = `relatorio-${cleanTitle}-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const pdfUri = doc.output("datauristring");
+      const base64Index = pdfUri.indexOf(";base64,");
+      let base64Data = "";
+      if (base64Index !== -1) {
+        base64Data = pdfUri.substring(base64Index + 8);
+      } else {
+        base64Data = btoa(doc.output());
+      }
+
+      const writeResult = await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Cache
+      });
+
+      await Share.share({
+        title: title,
+        text: subtitle,
+        url: writeResult.uri,
+        dialogTitle: "Salvar ou Compartilhar Relatório PDF"
+      });
+    } catch (err) {
+      console.error("Erro ao salvar/compartilhar PDF:", err);
+      alert("Erro ao gerar PDF: " + (err instanceof Error ? err.message : String(err)));
+    }
+  } else {
+    doc.save(filename);
+  }
 }
