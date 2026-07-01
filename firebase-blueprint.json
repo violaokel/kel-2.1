@@ -1,0 +1,27 @@
+{
+  "entities": {
+    "KelAppStoreItem": {
+      "title": "KelAppStoreItem",
+      "description": "A single document containing an array of data for a specific store key.",
+      "type": "object",
+      "properties": {
+        "val": {
+          "type": "array",
+          "description": "The array of values stored for this key"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when this document was updated"
+        }
+      },
+      "required": ["val", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/kel_app_store/{documentId}": {
+      "schema": "KelAppStoreItem",
+      "description": "The general-purpose key-value collection used for application sync"
+    }
+  }
+}

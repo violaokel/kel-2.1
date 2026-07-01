@@ -4,18 +4,43 @@
  */
 
 import express from "express";
+import cors from "cors";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createClient } from "@supabase/supabase-js";
+import { initializeApp as initFirebase, getApps as getFirebaseApps } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection, query, limit, getDocs, Firestore } from "firebase/firestore";
 import "dotenv/config";
 
-// Initialize Supabase Client
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const isSupabaseConfigured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
-const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+// Initialize Firebase Client SDK for Server
+let dbFirestore: Firestore | null = null;
+let isFirebaseConfigured = false;
+
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    if (config.projectId) {
+      let app;
+      if (getFirebaseApps().length === 0) {
+        app = initFirebase(config);
+      } else {
+        app = getFirebaseApps()[0];
+      }
+      const dbId = config.firestoreDatabaseId;
+      dbFirestore = dbId ? getFirestore(app, dbId) : getFirestore(app);
+      isFirebaseConfigured = true;
+      console.log(`[Firebase] Web SDK Inicializado com sucesso com o banco de dados: ${dbId || "(default)"}`);
+    } else {
+      console.log("[Firebase] projectId não configurado no config.");
+    }
+  } else {
+    console.log("[Firebase] Arquivo firebase-applet-config.json não encontrado. Operando em modo local.");
+  }
+} catch (err: any) {
+  console.error("[Firebase] Erro ao inicializar o Firebase Web SDK no servidor:", err);
+}
 
 
 interface ServerDatabase {
@@ -362,33 +387,44 @@ function saveDb(data: ServerDatabase) {
   }
 }
 
-// Supabase Async loading of the database state
+// Firestore helper to read a key-value document
+async function getFirestoreVal(key: string): Promise<any[] | null> {
+  if (!dbFirestore) return null;
+  try {
+    const docRef = doc(dbFirestore, "kel_app_store", key);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data()?.val || null;
+    }
+    return null;
+  } catch (err) {
+    console.error(`[Firebase] Erro ao obter chave ${key}:`, err);
+    return null;
+  }
+}
+
+// Firestore helper to write a key-value document
+async function setFirestoreVal(key: string, val: any[]): Promise<boolean> {
+  if (!dbFirestore) return false;
+  try {
+    const docRef = doc(dbFirestore, "kel_app_store", key);
+    await setDoc(docRef, {
+      val,
+      updatedAt: new Date().toISOString()
+    });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase] Erro ao definir chave ${key}:`, err);
+    return false;
+  }
+}
+
+// Firebase Async loading of the database state
 async function loadDbAsync(): Promise<ServerDatabase> {
-  if (!supabase) {
+  if (!dbFirestore) {
     return loadDb();
   }
   try {
-    const { data, error } = await supabase
-      .from("kel_app_store")
-      .select("*");
-
-    if (error) {
-      if (error.message && error.message.includes("fetch failed")) {
-        console.log("[Supabase] Nota: Conexão offline ou projeto indisponível. Operando localmente.");
-      } else {
-        console.log("[Supabase] Nota: Tabela 'kel_app_store' não localizada ou não criada no Supabase. Operando localmente.", error.message);
-      }
-      return loadDb();
-    }
-
-    if (!data || data.length === 0) {
-      // Seed Supabase with local dataset if table is completely empty
-      console.log("[Supabase] Tabela local com dados vazia no Supabase. Iniciando semeadura de dados...");
-      const localDb = loadDb();
-      await saveDbAsync(localDb);
-      return localDb;
-    }
-
     const db: ServerDatabase = {
       products: [],
       schoolMenus: [],
@@ -397,13 +433,28 @@ async function loadDbAsync(): Promise<ServerDatabase> {
       userAccounts: []
     };
 
-    data.forEach((row: any) => {
-      if (row.key === "products" && Array.isArray(row.val)) db.products = row.val;
-      if (row.key === "school_menus" && Array.isArray(row.val)) db.schoolMenus = row.val;
-      if (row.key === "transactions" && Array.isArray(row.val)) db.transactions = row.val;
-      if (row.key === "logs" && Array.isArray(row.val)) db.logs = row.val;
-      if (row.key === "user_accounts" && Array.isArray(row.val)) db.userAccounts = row.val;
-    });
+    // Load documents in parallel
+    const [productsVal, schoolMenusVal, transactionsVal, logsVal, userAccountsVal] = await Promise.all([
+      getFirestoreVal("products"),
+      getFirestoreVal("school_menus"),
+      getFirestoreVal("transactions"),
+      getFirestoreVal("logs"),
+      getFirestoreVal("user_accounts")
+    ]);
+
+    const allNull = productsVal === null && schoolMenusVal === null && transactionsVal === null && logsVal === null && userAccountsVal === null;
+    if (allNull) {
+      console.log("[Firebase] Firestore está vazio. Iniciando semeadura de dados com o banco local...");
+      const localDb = loadDb();
+      await saveDbAsync(localDb);
+      return localDb;
+    }
+
+    if (Array.isArray(productsVal)) db.products = productsVal;
+    if (Array.isArray(schoolMenusVal)) db.schoolMenus = schoolMenusVal;
+    if (Array.isArray(transactionsVal)) db.transactions = transactionsVal;
+    if (Array.isArray(logsVal)) db.logs = logsVal;
+    if (Array.isArray(userAccountsVal)) db.userAccounts = userAccountsVal;
 
     // Merge check: if key rows are missing or unseeded, populate from local
     const fallbackDb = loadDb();
@@ -417,51 +468,52 @@ async function loadDbAsync(): Promise<ServerDatabase> {
     saveDb(db);
     return db;
   } catch (err: any) {
-    console.log("[Supabase] Nota: Erro ao conectar ao Supabase (operando em modo offline local).");
+    console.log("[Firebase] Nota: Erro ao conectar ao Firebase (operando em modo offline local).", err);
     return loadDb();
   }
 }
 
-// Supabase Async upsert payload database synchronizer (atomic rows upsert)
+// Firebase Async database synchronizer
 async function saveDbAsync(data: ServerDatabase) {
   // Always commit local backup for reliability
   saveDb(data);
 
-  if (!supabase) {
+  if (!dbFirestore) {
     return;
   }
 
   try {
-    const payloads = [
-      { key: "products", val: data.products },
-      { key: "school_menus", val: data.schoolMenus },
-      { key: "transactions", val: data.transactions },
-      { key: "logs", val: data.logs },
-      { key: "user_accounts", val: data.userAccounts }
-    ];
+    const results = await Promise.all([
+      setFirestoreVal("products", data.products),
+      setFirestoreVal("school_menus", data.schoolMenus),
+      setFirestoreVal("transactions", data.transactions),
+      setFirestoreVal("logs", data.logs),
+      setFirestoreVal("user_accounts", data.userAccounts || [])
+    ]);
 
-    const promises = payloads.map(payload => 
-      supabase
-        .from("kel_app_store")
-        .upsert(payload, { onConflict: "key" })
-    );
+    const hasError = results.some(r => !r);
 
-    const results = await Promise.all(promises);
-    const errors = results.filter(r => r.error);
-
-    if (errors.length > 0) {
-      console.log(`[Supabase] Gravação local realizada. Sincronização em nuvem pendente.`);
+    if (hasError) {
+      console.log(`[Firebase] Gravação local realizada. Sincronização em nuvem pendente.`);
     } else {
-      console.log("[Supabase] Banco de dados totalmente sincronizado na nuvem com sucesso!");
+      console.log("[Firebase] Banco de dados totalmente sincronizado na nuvem com sucesso!");
     }
   } catch (err) {
-    console.log("[Supabase] Nota: Conexão offline ou sem resposta do banco. Dados gravados localmente.");
+    console.log("[Firebase] Nota: Conexão offline ou sem resposta do banco. Dados gravados localmente.");
   }
 }
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Enable CORS for mobile devices/Capacitor/multiple devices
+  app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+  }));
 
   app.use(express.json());
 
@@ -475,53 +527,74 @@ async function startServer() {
 
   // Endpoints: Health Check
   app.get("/api/health", async (req, res) => {
-    if (!supabase) {
+    if (!dbFirestore) {
+      const offlineStatus = {
+        configured: false,
+        connected: false,
+        status: "Modo Local Offline",
+        table_active: false,
+        instructions: "O Firebase não está configurado. O sistema está salvando e operando localmente com total segurança."
+      };
       res.json({
         status: "ok",
         message: "Servidor de Sincronização Kel Online",
-        supabase: {
-          configured: false,
-          connected: false,
-          status: "Modo Local Offline",
-          table_active: false,
-          instructions: "O Supabase não está configurado. O sistema está salvando e operando localmente com total segurança."
-        }
+        firebase: offlineStatus,
+        supabase: offlineStatus
       });
       return;
     }
 
-    let supabaseStatus = "Sincronizado e Ativo";
-    let checkExplanation = "Tudo funcionando perfeitamente.";
-    let tableExists = true;
+    let firebaseStatus = "Sincronizado e Ativo";
+    let checkExplanation = "Tudo funcionando perfeitamente no Firebase.";
+    let connectionActive = true;
 
     try {
-      const { error } = await supabase
-        .from("kel_app_store")
-        .select("key")
-        .limit(1);
-
-      if (error) {
-        tableExists = false;
-        supabaseStatus = "Instalação SQL Necessária";
-        checkExplanation = `A conexão com o Supabase foi bem-sucedida, mas a tabela 'kel_app_store' ainda não existe no seu projeto. Por favor, execute a seguinte consulta SQL no painel SQL Editor do seu Supabase:\n\nCREATE TABLE kel_app_store (\n  key text PRIMARY KEY,\n  val jsonb NOT NULL,\n  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL\n);`;
-      }
+      // Test Firestore connection by doing a light query
+      await getDocs(query(collection(dbFirestore, "kel_app_store"), limit(1)));
     } catch (err: any) {
-      tableExists = false;
-      supabaseStatus = "Erro de Conexão";
-      checkExplanation = `Erro de rede ou chaves inválidas: ${err.message || err}`;
+      connectionActive = false;
+      firebaseStatus = "Erro de Conexão";
+      checkExplanation = `Erro de rede ou permissões insuficientes no Firebase: ${err.message || err}`;
     }
+
+    const activeStatus = {
+      configured: true,
+      connected: connectionActive,
+      status: firebaseStatus,
+      table_active: connectionActive,
+      instructions: checkExplanation
+    };
 
     res.json({
       status: "ok",
       message: "Servidor de Sincronização Kel Online",
-      supabase: {
-        configured: true,
-        connected: true,
-        status: supabaseStatus,
-        table_active: tableExists,
-        instructions: checkExplanation
-      }
+      firebase: activeStatus,
+      supabase: activeStatus
     });
+  });
+
+  // Serve Firebase client config securely
+  app.get("/api/firebase-config", (req, res) => {
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        res.json({
+          apiKey: config.apiKey,
+          authDomain: config.authDomain,
+          projectId: config.projectId,
+          storageBucket: config.storageBucket,
+          messagingSenderId: config.messagingSenderId,
+          appId: config.appId,
+          measurementId: config.measurementId,
+          firestoreDatabaseId: config.firestoreDatabaseId
+        });
+      } else {
+        res.status(404).json({ error: "firebase-applet-config.json not found" });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || err });
+    }
   });
 
   // Get complete database state (sync pull)
@@ -698,17 +771,18 @@ async function startServer() {
 
   // Predict ideal purchase quantity with Gemini API
   app.post("/api/gemini/suggest-purchase", async (req, res) => {
-    const { product, transactions, menus } = req.body;
-    if (!product) {
-      return res.status(400).json({ error: "Produto inválido para análise." });
-    }
-
-    const ai = getGeminiClient();
-    if (!ai) {
-      return res.json(fallbackSuggestion(product, transactions || []));
-    }
-
     try {
+      const { product, transactions, menus } = req.body || {};
+      if (!product) {
+        return res.status(400).json({ error: "Produto inválido para análise." });
+      }
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        console.log("[GEMINI] Chave API não configurada ou inválida. Retornando sugestão baseada no algoritmo local.");
+        return res.json(fallbackSuggestion(product, transactions || []));
+      }
+
       const today = new Date().toISOString().slice(0, 10);
       const model = "gemini-3.5-flash";
       const prompt = `
@@ -780,8 +854,8 @@ async function startServer() {
       const parsed = JSON.parse(textOutput);
       res.json(parsed);
     } catch (error: any) {
-      console.error("Erro na API do Gemini:", error);
-      res.json(fallbackSuggestion(product, transactions || []));
+      console.error("[GEMINI] Erro na API do Gemini ou inicialização:", error);
+      res.json(fallbackSuggestion(req.body?.product || {}, req.body?.transactions || []));
     }
   });
 

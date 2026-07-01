@@ -49,19 +49,19 @@ export default function AuditView({
   const [backupDownloadedMsg, setBackupDownloadedMsg] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
 
-  // Supabase monitoring state
-  const [supabaseStatus, setSupabaseStatus] = useState<any>(null);
+  // Firebase monitoring state
+  const [firebaseStatus, setFirebaseStatus] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(true);
 
   React.useEffect(() => {
     fetch(getApiUrl() + "/api/health")
       .then(res => res.json())
       .then(data => {
-        setSupabaseStatus(data.supabase);
+        setFirebaseStatus(data.firebase || data.supabase);
         setLoadingHealth(false);
       })
       .catch(err => {
-        console.error("Erro ao ler integridade do Supabase:", err);
+        console.error("Erro ao ler integridade do Firebase:", err);
         setLoadingHealth(false);
       });
   }, []);
@@ -162,77 +162,64 @@ export default function AuditView({
             </div>
           </div>
 
-          {/* Supabase Database Connection Status */}
-          <div className="bg-white p-5 border border-gray-100 rounded-3xl shadow-xs space-y-3" id="supabase-status-board">
+          {/* Firebase Database Connection Status */}
+          <div className="bg-white p-5 border border-gray-100 rounded-3xl shadow-xs space-y-3" id="firebase-status-board">
             <h3 className="font-bold text-gray-800 text-sm flex items-center">
               <Database className="w-4.5 h-4.5 mr-1.5 text-emerald-600" />
-              Sincronização Supabase Ativa
+              Sincronização Firebase Ativa
             </h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              O sistema sincroniza automaticamente todas as movimentações, cardápios e auditorias diretamente no seu servidor Supabase de forma nativa e segura.
+              O sistema sincroniza automaticamente todas as movimentações, cardápios e auditorias diretamente no seu banco de dados Firebase Firestore de forma nativa e segura.
             </p>
 
             {loadingHealth ? (
-              <div className="text-xs text-gray-400 animate-pulse py-1">Verificando comunicação com Supabase...</div>
-            ) : supabaseStatus ? (
+              <div className="text-xs text-gray-400 animate-pulse py-1">Verificando comunicação com Firebase...</div>
+            ) : firebaseStatus ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-gray-55 pb-2">
                   <span className="text-xs text-gray-600 font-semibold">Status do Banco:</span>
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                    supabaseStatus.configured === false
+                    firebaseStatus.configured === false
                       ? "bg-slate-100 text-slate-700"
-                      : supabaseStatus.table_active 
+                      : firebaseStatus.table_active 
                         ? "bg-emerald-100 text-emerald-800" 
                         : "bg-amber-150 text-amber-900"
                   }`}>
-                    {supabaseStatus.status}
+                    {firebaseStatus.status}
                   </span>
                 </div>
 
-                {supabaseStatus.configured === false && (
+                {firebaseStatus.configured === false && (
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left space-y-1">
                     <span className="text-[10px] font-bold text-slate-700 block">📦 Armazenamento Local Seguro</span>
                     <p className="text-[10px] text-gray-550 leading-normal">
                       O sistema está salvando e operando de forma 100% autônoma e segura no banco de dados local do servidor.
-                      Para habilitar a sincronização automática e backup em tempo real na nuvem do seu próprio projeto Supabase, configure as credenciais
-                      <code className="bg-slate-100 text-slate-800 px-1 py-0.2 rounded font-mono text-[9px] mx-1">SUPABASE_URL</code> e
-                      <code className="bg-slate-100 text-slate-800 px-1 py-0.2 rounded font-mono text-[9px] mx-1">SUPABASE_ANON_KEY</code> nas variáveis de ambiente do AI Studio.
+                      Para habilitar a sincronização automática e backup em tempo real, certifique-se de que o arquivo <code className="bg-slate-100 text-slate-800 px-1 py-0.2 rounded font-mono text-[9px]">firebase-applet-config.json</code> esteja devidamente configurado e o banco provisionado.
                     </p>
                   </div>
                 )}
 
-                {supabaseStatus.configured !== false && !supabaseStatus.table_active && (
+                {firebaseStatus.configured !== false && !firebaseStatus.table_active && (
                   <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2 text-left">
-                    <span className="text-[10px] font-bold text-amber-800 block">⚠️ Configuração SQL Pendente:</span>
+                    <span className="text-[10px] font-bold text-amber-800 block">⚠️ Conectando ao Firestore:</span>
                     <p className="text-[10px] text-gray-650 leading-normal">
-                      A conexão foi estabelecida! Agora é necessário criar a tabela receptora de dados no seu Painel SQL do Supabase. Copie o script SQL abaixo:
+                      A configuração do Firebase está presente, mas não foi possível gravar ou ler documentos da coleção <code className="bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-mono text-[9px]">kel_app_store</code>.
+                      Por favor, verifique se o banco de dados Firestore está provisionado e com as regras de segurança apropriadas.
                     </p>
-                    <div className="relative">
-                      <pre className="p-2 bg-slate-900 text-slate-100 font-mono text-[9px] rounded-lg overflow-x-auto select-all max-h-24">
-{`CREATE TABLE kel_app_store (
-  key text PRIMARY KEY,
-  val jsonb NOT NULL,
-  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);`}
-                      </pre>
-                    </div>
-                    <span className="text-[9px] text-gray-400 italic block">
-                      * Rode a consulta acima no SQL Editor do Supabase para ativar a gravação na nuvem.
-                    </span>
                   </div>
                 )}
 
-                {supabaseStatus.configured !== false && supabaseStatus.table_active && (
+                {firebaseStatus.configured !== false && firebaseStatus.table_active && (
                   <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl text-left">
-                    <span className="text-[10px] font-bold text-emerald-800 block">✓ Banco de Dados Conectado</span>
+                    <span className="text-[10px] font-bold text-emerald-800 block">✓ Firestore Conectado</span>
                     <p className="text-[10px] text-gray-500 mt-1 leading-normal">
-                      A tabela <code className="bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded font-mono text-[9px]">kel_app_store</code> foi carregada. Cada modificação realizada localmente é transmitida de forma automática.
+                      A coleção de nuvem <code className="bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded font-mono text-[9px]">kel_app_store</code> está ativa e respondendo. Suas alterações são sincronizadas em tempo real automaticamente.
                     </p>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="text-xs text-rose-600 py-1 font-semibold">Não foi possível estabelecer contato com o serviço Supabase. Executando em modo de contingência local.</div>
+              <div className="text-xs text-rose-600 py-1 font-semibold">Não foi possível estabelecer contato com o serviço Firebase. Executando em modo de contingência local.</div>
             )}
           </div>
 

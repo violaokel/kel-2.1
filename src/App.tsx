@@ -337,6 +337,8 @@ export default function App() {
 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [firestoreDb, setFirestoreDb] = useState<any>(null);
+  const [isFirebaseRealtime, setIsFirebaseRealtime] = useState<boolean>(false);
 
   // Pre-load saved or default data from local storage, then reconcile online database
   useEffect(() => {
@@ -469,17 +471,99 @@ export default function App() {
     }
   };
 
+  // Real-time Firebase Connection & Listener Setup
+  useEffect(() => {
+    let unsubscribes: (() => void)[] = [];
+
+    const initFirebaseRealtime = async () => {
+      try {
+        const response = await fetch(getApiUrl() + "/api/firebase-config");
+        if (!response.ok) {
+          console.log("[Firebase Client] Não foi possível obter configurações do Firebase");
+          return;
+        }
+        const config = await response.json();
+        if (!config.projectId || !config.apiKey) {
+          console.log("[Firebase Client] Configurações incompletas do Firebase");
+          return;
+        }
+
+        // Lazy load standard Firebase SDK browser-compatible methods
+        const { initializeApp: initApp, getApps: getAppList } = await import("firebase/app");
+        const { getFirestore: getFs, doc: fsDoc, onSnapshot: fsOnSnapshot } = await import("firebase/firestore");
+
+        let app;
+        const apps = getAppList();
+        if (apps.length === 0) {
+          app = initApp(config);
+        } else {
+          app = apps[0];
+        }
+
+        const db = config.firestoreDatabaseId ? getFs(app, config.firestoreDatabaseId) : getFs(app);
+        setFirestoreDb(db);
+        setIsFirebaseRealtime(true);
+        console.log("[Firebase Client] Conectado e escutando alterações via Firebase Realtime SDK.");
+
+        const docKeys = [
+          { key: "products", setter: setProducts, localKey: "kel_products" },
+          { key: "school_menus", setter: setMenus, localKey: "kel_menus" },
+          { key: "transactions", setter: setTransactions, localKey: "kel_transactions" },
+          { key: "logs", setter: setLogs, localKey: "kel_logs" },
+          { key: "user_accounts", setter: setUserAccounts, localKey: "kel_user_accounts" }
+        ];
+
+        docKeys.forEach(({ key, setter, localKey }) => {
+          const docRef = fsDoc(db, "kel_app_store", key);
+          const unsub = fsOnSnapshot(docRef, (snap) => {
+            if (snap.exists()) {
+              const data = snap.data();
+              if (data && Array.isArray(data.val)) {
+                setter((prev: any) => {
+                  if (JSON.stringify(prev) !== JSON.stringify(data.val)) {
+                    console.log(`[Firebase Client] Alteração detectada em ${key}. Sincronizando...`);
+                    localStorage.setItem(localKey, JSON.stringify(data.val));
+                    return data.val;
+                  }
+                  return prev;
+                });
+              }
+            }
+          }, (err) => {
+            console.error(`[Firebase Client] Erro no listener em tempo real para ${key}:`, err);
+          });
+          unsubscribes.push(unsub);
+        });
+
+      } catch (err) {
+        console.warn("[Firebase Client] Não foi possível ativar sincronização em tempo real:", err);
+      }
+    };
+
+    if (isInitialized) {
+      initFirebaseRealtime();
+    }
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [isInitialized]);
+
   // Real-time auto-synchronization polling: keep multiple users/devices synced
   useEffect(() => {
     if (!isInitialized) return;
+    if (isFirebaseRealtime) {
+      console.log("[Firebase Client] Sincronização em tempo real ativa. Intervalo de consulta HTTP desativado.");
+      return;
+    }
 
-    // Fetch new updates from server every 8 seconds automatically
+    // Fetch new updates from server every 8 seconds automatically if real-time Firestore is not active
     const syncInterval = setInterval(() => {
       pullDataFromServer();
     }, 8000);
 
     return () => clearInterval(syncInterval);
-  }, [isInitialized]);
+  }, [isInitialized, isFirebaseRealtime]);
 
   const pushDataToServer = async (
     currentProds = products, 
@@ -489,6 +573,32 @@ export default function App() {
     currentUsers?: UserAccount[]
   ) => {
     setIsSyncing(true);
+    let syncedSuccessfully = false;
+
+    // Try client-side direct Firebase sync first if available
+    if (firestoreDb && isFirebaseRealtime) {
+      try {
+        const { doc: fsDoc, setDoc: fsSetDoc } = await import("firebase/firestore");
+        
+        const updates = [
+          fsSetDoc(fsDoc(firestoreDb, "kel_app_store", "products"), { val: currentProds, updatedAt: new Date().toISOString() }),
+          fsSetDoc(fsDoc(firestoreDb, "kel_app_store", "school_menus"), { val: currentMenus, updatedAt: new Date().toISOString() }),
+          fsSetDoc(fsDoc(firestoreDb, "kel_app_store", "transactions"), { val: currentTxs, updatedAt: new Date().toISOString() }),
+          fsSetDoc(fsDoc(firestoreDb, "kel_app_store", "logs"), { val: currentLogs, updatedAt: new Date().toISOString() })
+        ];
+
+        if (currentUsers !== undefined) {
+          updates.push(fsSetDoc(fsDoc(firestoreDb, "kel_app_store", "user_accounts"), { val: currentUsers, updatedAt: new Date().toISOString() }));
+        }
+
+        await Promise.all(updates);
+        syncedSuccessfully = true;
+        console.log("[Firebase Client] Sincronização direta enviada com sucesso.");
+      } catch (err) {
+        console.warn("[Firebase Client] Falha no salvamento direto via Firebase. Utilizando API do servidor...", err);
+      }
+    }
+
     try {
       const payload: any = {
         products: currentProds,
@@ -506,7 +616,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
+      if (res.ok || syncedSuccessfully) {
         setSyncStatus({
           isOnline: true,
           pendingSyncCount: 0,
@@ -516,11 +626,19 @@ export default function App() {
         throw new Error();
       }
     } catch {
-      setSyncStatus(prev => ({
-        ...prev,
-        isOnline: false,
-        pendingSyncCount: prev.pendingSyncCount + 1
-      }));
+      if (syncedSuccessfully) {
+        setSyncStatus({
+          isOnline: true,
+          pendingSyncCount: 0,
+          lastSyncedAt: new Date().toISOString()
+        });
+      } else {
+        setSyncStatus(prev => ({
+          ...prev,
+          isOnline: false,
+          pendingSyncCount: prev.pendingSyncCount + 1
+        }));
+      }
     } finally {
       setIsSyncing(false);
     }
