@@ -9,37 +9,19 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { initializeApp as initFirebase, getApps as getFirebaseApps } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc, collection, query, limit, getDocs, Firestore } from "firebase/firestore";
+import { createClient } from "@supabase/supabase-js";
 import "dotenv/config";
 
-// Initialize Firebase Client SDK for Server
-let dbFirestore: Firestore | null = null;
-let isFirebaseConfigured = false;
+// Initialize Supabase Client for Server
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const isSupabaseConfigured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!) : null;
 
-try {
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    if (config.projectId) {
-      let app;
-      if (getFirebaseApps().length === 0) {
-        app = initFirebase(config);
-      } else {
-        app = getFirebaseApps()[0];
-      }
-      const dbId = config.firestoreDatabaseId;
-      dbFirestore = dbId ? getFirestore(app, dbId) : getFirestore(app);
-      isFirebaseConfigured = true;
-      console.log(`[Firebase] Web SDK Inicializado com sucesso com o banco de dados: ${dbId || "(default)"}`);
-    } else {
-      console.log("[Firebase] projectId não configurado no config.");
-    }
-  } else {
-    console.log("[Firebase] Arquivo firebase-applet-config.json não encontrado. Operando em modo local.");
-  }
-} catch (err: any) {
-  console.error("[Firebase] Erro ao inicializar o Firebase Web SDK no servidor:", err);
+if (isSupabaseConfigured) {
+  console.log(`[Supabase] Servidor conectado ao projeto Supabase: ${SUPABASE_URL}`);
+} else {
+  console.log("[Supabase] Chaves de configuração ausentes em .env. Operando em modo local.");
 }
 
 
@@ -54,260 +36,14 @@ interface ServerDatabase {
 const DB_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "db.json");
 
-// Default initial seed data for schools
-const INITIAL_PRODUCTS = [
-  {
-    id: "prod-1",
-    name: "Arroz Integral",
-    barcode: "7891234567890",
-    category: "Grãos e Cereais",
-    quantity: 85.0,
-    minQuantity: 20.0,
-    unit: "kg",
-    expiryDate: "2026-12-15",
-    supplier: "Arroz do Sul S/A",
-    location: "Despensa Secos A",
-    wastage: 1.2,
-  },
-  {
-    id: "prod-2",
-    name: "Feijão Carioca",
-    barcode: "7891234567891",
-    category: "Grãos e Cereais",
-    quantity: 45.0,
-    minQuantity: 15.0,
-    unit: "kg",
-    expiryDate: "2026-10-30",
-    supplier: "Feijão Verde Alimentos",
-    location: "Despensa Secos A",
-    wastage: 0.5,
-  },
-  {
-    id: "prod-3",
-    name: "Peito de Frango",
-    barcode: "7891234567892",
-    category: "Carnes e Frios",
-    quantity: 32.5,
-    minQuantity: 10.0,
-    unit: "kg",
-    expiryDate: "2026-07-20",
-    supplier: "Frigorífico Kel Distribuidora",
-    location: "Freezer Vertical 01",
-    wastage: 0.8,
-  },
-  {
-    id: "prod-4",
-    name: "Óleo de Soja",
-    barcode: "7891234567893",
-    category: "Óleos e Gorduras",
-    quantity: 18.0,
-    minQuantity: 5.0,
-    unit: "litros",
-    expiryDate: "2026-09-12",
-    supplier: "Distribuidora Vale Verde",
-    location: "Armário de Temperos",
-    wastage: 0.1,
-  },
-  {
-    id: "prod-5",
-    name: "Cebola",
-    barcode: "7891234567894",
-    category: "Hortifrúti",
-    quantity: 12.0,
-    minQuantity: 5.0,
-    unit: "kg",
-    expiryDate: "2026-06-18",
-    supplier: "Horta Local e Cooperativa",
-    location: "Caixa Plástica Geladeira 02",
-    wastage: 2.1,
-  },
-  {
-    id: "prod-6",
-    name: "Alho Triturado",
-    barcode: "7891234567895",
-    category: "Hortifrúti",
-    quantity: 4.5,
-    minQuantity: 2.0,
-    unit: "kg",
-    expiryDate: "2026-08-01",
-    supplier: "Horta Local e Cooperativa",
-    location: "Armário de Temperos",
-    wastage: 0.05,
-  },
-  {
-    id: "prod-7",
-    name: "Macarrão Parafuso",
-    barcode: "7891234567896",
-    category: "Grãos e Cereais",
-    quantity: 60.0,
-    minQuantity: 15.0,
-    unit: "kg",
-    expiryDate: "2026-11-20",
-    supplier: "Arroz do Sul S/A",
-    location: "Despensa Secos B",
-    wastage: 0.3,
-  },
-  {
-    id: "prod-8",
-    name: "Molho de Tomate",
-    barcode: "7891234567897",
-    category: "Enlatados",
-    quantity: 24.0,
-    minQuantity: 8.0,
-    unit: "unidades",
-    expiryDate: "2027-02-10",
-    supplier: "Distribuidora Vale Verde",
-    location: "Despensa Secos B",
-    wastage: 0.1,
-  },
-  {
-    id: "prod-9",
-    name: "Leite Integral UHT",
-    barcode: "7891234567898",
-    category: "Laticínios",
-    quantity: 40.0,
-    minQuantity: 12.0,
-    unit: "litros",
-    expiryDate: "2026-06-10", // Vencendo logo
-    supplier: "Cooperativa de Laticínios Kel",
-    location: "Geladeira Industrial 01",
-    wastage: 0.2,
-  },
-  {
-    id: "prod-10",
-    name: "Maçã Gala",
-    barcode: "7891234567899",
-    category: "Hortifrúti",
-    quantity: 2.5, // Estoque Baixo!
-    minQuantity: 8.0,
-    unit: "kg",
-    expiryDate: "2026-06-14",
-    supplier: "Horta Local e Cooperativa",
-    location: "Caixa Plástica Geladeira 02",
-    wastage: 0.4,
-  },
-];
+// Default initial seed data for schools (initialized empty for production/clean start)
+const INITIAL_PRODUCTS = [];
 
-const INITIAL_MENUS = [
-  {
-    id: "menu-1",
-    name: "Arroz, Feijão e Peito de Frango Grelhado",
-    mealType: "almoco",
-    date: "2026-06-06", // Today
-    ingredients: [
-      { productId: "prod-1", name: "Arroz Integral", quantityPerPortion: 0.08, unit: "kg" },
-      { productId: "prod-2", name: "Feijão Carioca", quantityPerPortion: 0.05, unit: "kg" },
-      { productId: "prod-3", name: "Peito de Frango", quantityPerPortion: 0.10, unit: "kg" },
-      { productId: "prod-4", name: "Óleo de Soja", quantityPerPortion: 0.005, unit: "litros" },
-      { productId: "prod-5", name: "Cebola", quantityPerPortion: 0.01, unit: "kg" },
-      { productId: "prod-6", name: "Alho Triturado", quantityPerPortion: 0.002, unit: "kg" },
-    ],
-    portionsCount: 150,
-    served: false,
-  },
-  {
-    id: "menu-2",
-    name: "Macarronada de Frango ao Molho",
-    mealType: "almoco",
-    date: "2026-06-07", // Tomorrow
-    ingredients: [
-      { productId: "prod-7", name: "Macarrão Parafuso", quantityPerPortion: 0.09, unit: "kg" },
-      { productId: "prod-3", name: "Peito de Frango", quantityPerPortion: 0.08, unit: "kg" },
-      { productId: "prod-8", name: "Molho de Tomate", quantityPerPortion: 0.15, unit: "unidades" },
-      { productId: "prod-4", name: "Óleo de Soja", quantityPerPortion: 0.005, unit: "litros" },
-      { productId: "prod-5", name: "Cebola", quantityPerPortion: 0.01, unit: "kg" },
-      { productId: "prod-6", name: "Alho Triturado", quantityPerPortion: 0.002, unit: "kg" },
-    ],
-    portionsCount: 120,
-    served: false,
-  },
-  {
-    id: "menu-3",
-    name: "Copo de Leite Integral e Fruta",
-    mealType: "matutino",
-    date: "2026-06-06", // Today morning
-    ingredients: [
-      { productId: "prod-9", name: "Leite Integral UHT", quantityPerPortion: 0.20, unit: "litros" },
-      { productId: "prod-10", name: "Maçã Gala", quantityPerPortion: 0.12, unit: "kg" },
-    ],
-    portionsCount: 80,
-    served: true, // Already decremented!
-  },
-];
+const INITIAL_MENUS = [];
 
-const INITIAL_TRANSACTIONS = [
-  {
-    id: "tx-1",
-    productId: "prod-9",
-    productName: "Leite Integral UHT",
-    type: "entrada",
-    quantity: 50.0,
-    unit: "litros",
-    date: "2026-06-05T09:30:00Z",
-    user: "kel_admin",
-    notes: "Entrada via Fornecedor - Lote de Laticínios",
-  },
-  {
-    id: "tx-2",
-    productId: "prod-9",
-    productName: "Leite Integral UHT",
-    type: "saida",
-    quantity: 16.0,
-    unit: "litros",
-    date: "2026-06-06T07:15:00Z",
-    user: "maria_merenda",
-    notes: "Consumo automático - Copo de Leite Integral e Fruta (80 porções)",
-  },
-  {
-    id: "tx-3",
-    productId: "prod-10",
-    productName: "Maçã Gala",
-    type: "saida",
-    quantity: 9.6,
-    unit: "kg",
-    date: "2026-06-06T07:15:00Z",
-    user: "maria_merenda",
-    notes: "Consumo automático - Copo de Leite Integral e Fruta (80 porções)",
-  },
-  {
-    id: "tx-4",
-    productId: "prod-10",
-    productName: "Maçã Gala",
-    type: "desperdicio",
-    quantity: 0.4,
-    unit: "kg",
-    date: "2026-06-05T14:40:00Z",
-    user: "kel_admin",
-    notes: "Produto machucado e impróprio para consumo na triagem",
-  }
-];
+const INITIAL_TRANSACTIONS = [];
 
-const INITIAL_LOGS = [
-  {
-    id: "log-1",
-    timestamp: "2026-06-05T09:30:00.000Z",
-    user: "kel_admin",
-    role: "Administrador",
-    action: "Entrada de Estoque",
-    details: "Registrou entrada de 50.0 litros de Leite Integral UHT",
-  },
-  {
-    id: "log-2",
-    timestamp: "2026-06-05T14:42:00.000Z",
-    user: "kel_admin",
-    role: "Administrador",
-    action: "Desperdício",
-    details: "Registrou desperdício de 0.4 kg de Maçã Gala",
-  },
-  {
-    id: "log-3",
-    timestamp: "2026-06-06T07:15:00.000Z",
-    user: "maria_merenda",
-    role: "Merendeira",
-    action: "Consumo de Cardápio",
-    details: "Consumo automático do cardápio 'Copo de Leite Integral e Fruta'",
-  }
-];
+const INITIAL_LOGS = [];
 
 const DEFAULT_USER_ACCOUNTS = [
   {
@@ -387,44 +123,29 @@ function saveDb(data: ServerDatabase) {
   }
 }
 
-// Firestore helper to read a key-value document
-async function getFirestoreVal(key: string): Promise<any[] | null> {
-  if (!dbFirestore) return null;
-  try {
-    const docRef = doc(dbFirestore, "kel_app_store", key);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data()?.val || null;
-    }
-    return null;
-  } catch (err) {
-    console.error(`[Firebase] Erro ao obter chave ${key}:`, err);
-    return null;
-  }
-}
-
-// Firestore helper to write a key-value document
-async function setFirestoreVal(key: string, val: any[]): Promise<boolean> {
-  if (!dbFirestore) return false;
-  try {
-    const docRef = doc(dbFirestore, "kel_app_store", key);
-    await setDoc(docRef, {
-      val,
-      updatedAt: new Date().toISOString()
-    });
-    return true;
-  } catch (err) {
-    console.error(`[Firebase] Erro ao definir chave ${key}:`, err);
-    return false;
-  }
-}
-
-// Firebase Async loading of the database state
+// Supabase Async loading of the database state
 async function loadDbAsync(): Promise<ServerDatabase> {
-  if (!dbFirestore) {
+  if (!supabase) {
     return loadDb();
   }
   try {
+    const { data, error } = await supabase.from("kel_app_store").select("*");
+    if (error) {
+      if (error.message && error.message.includes("fetch failed")) {
+        console.log("[Supabase] Nota: Conexão offline ou projeto indisponível. Operando localmente.");
+      } else {
+        console.log("[Supabase] Nota: Tabela 'kel_app_store' não localizada ou não criada no Supabase. Operando localmente.", error.message);
+      }
+      return loadDb();
+    }
+
+    if (!data || data.length === 0) {
+      console.log("[Supabase] Tabela local com dados vazia no Supabase. Iniciando semeadura de dados...");
+      const localDb = loadDb();
+      await saveDbAsync(localDb);
+      return localDb;
+    }
+
     const db: ServerDatabase = {
       products: [],
       schoolMenus: [],
@@ -433,30 +154,14 @@ async function loadDbAsync(): Promise<ServerDatabase> {
       userAccounts: []
     };
 
-    // Load documents in parallel
-    const [productsVal, schoolMenusVal, transactionsVal, logsVal, userAccountsVal] = await Promise.all([
-      getFirestoreVal("products"),
-      getFirestoreVal("school_menus"),
-      getFirestoreVal("transactions"),
-      getFirestoreVal("logs"),
-      getFirestoreVal("user_accounts")
-    ]);
+    data.forEach((row: any) => {
+      if (row.key === "products" && Array.isArray(row.val)) db.products = row.val;
+      if (row.key === "school_menus" && Array.isArray(row.val)) db.schoolMenus = row.val;
+      if (row.key === "transactions" && Array.isArray(row.val)) db.transactions = row.val;
+      if (row.key === "logs" && Array.isArray(row.val)) db.logs = row.val;
+      if (row.key === "user_accounts" && Array.isArray(row.val)) db.userAccounts = row.val;
+    });
 
-    const allNull = productsVal === null && schoolMenusVal === null && transactionsVal === null && logsVal === null && userAccountsVal === null;
-    if (allNull) {
-      console.log("[Firebase] Firestore está vazio. Iniciando semeadura de dados com o banco local...");
-      const localDb = loadDb();
-      await saveDbAsync(localDb);
-      return localDb;
-    }
-
-    if (Array.isArray(productsVal)) db.products = productsVal;
-    if (Array.isArray(schoolMenusVal)) db.schoolMenus = schoolMenusVal;
-    if (Array.isArray(transactionsVal)) db.transactions = transactionsVal;
-    if (Array.isArray(logsVal)) db.logs = logsVal;
-    if (Array.isArray(userAccountsVal)) db.userAccounts = userAccountsVal;
-
-    // Merge check: if key rows are missing or unseeded, populate from local
     const fallbackDb = loadDb();
     if (db.products.length === 0 && fallbackDb.products.length > 0) db.products = fallbackDb.products;
     if (db.schoolMenus.length === 0 && fallbackDb.schoolMenus.length > 0) db.schoolMenus = fallbackDb.schoolMenus;
@@ -464,42 +169,46 @@ async function loadDbAsync(): Promise<ServerDatabase> {
     if (db.logs.length === 0 && fallbackDb.logs.length > 0) db.logs = fallbackDb.logs;
     if ((!db.userAccounts || db.userAccounts.length === 0) && fallbackDb.userAccounts.length > 0) db.userAccounts = fallbackDb.userAccounts;
 
-    // Sync back to local backup file too
     saveDb(db);
     return db;
   } catch (err: any) {
-    console.log("[Firebase] Nota: Erro ao conectar ao Firebase (operando em modo offline local).", err);
+    console.log("[Supabase] Nota: Erro ao conectar ao Supabase (operando em modo offline local).", err);
     return loadDb();
   }
 }
 
-// Firebase Async database synchronizer
+// Supabase Async database synchronizer
 async function saveDbAsync(data: ServerDatabase) {
   // Always commit local backup for reliability
   saveDb(data);
 
-  if (!dbFirestore) {
+  if (!supabase) {
     return;
   }
 
   try {
-    const results = await Promise.all([
-      setFirestoreVal("products", data.products),
-      setFirestoreVal("school_menus", data.schoolMenus),
-      setFirestoreVal("transactions", data.transactions),
-      setFirestoreVal("logs", data.logs),
-      setFirestoreVal("user_accounts", data.userAccounts || [])
-    ]);
+    const payloads = [
+      { key: "products", val: data.products },
+      { key: "school_menus", val: data.schoolMenus },
+      { key: "transactions", val: data.transactions },
+      { key: "logs", val: data.logs },
+      { key: "user_accounts", val: data.userAccounts || [] }
+    ];
 
-    const hasError = results.some(r => !r);
+    const promises = payloads.map((payload) => 
+      supabase.from("kel_app_store").upsert(payload, { onConflict: "key" })
+    );
+
+    const results = await Promise.all(promises);
+    const hasError = results.some(r => r.error);
 
     if (hasError) {
-      console.log(`[Firebase] Gravação local realizada. Sincronização em nuvem pendente.`);
+      console.log(`[Supabase] Gravação local realizada. Sincronização em nuvem pendente ou parcial.`);
     } else {
-      console.log("[Firebase] Banco de dados totalmente sincronizado na nuvem com sucesso!");
+      console.log("[Supabase] Banco de dados totalmente sincronizado na nuvem com sucesso!");
     }
   } catch (err) {
-    console.log("[Firebase] Nota: Conexão offline ou sem resposta do banco. Dados gravados localmente.");
+    console.log("[Supabase] Nota: Conexão offline ou sem resposta do banco. Dados gravados localmente.");
   }
 }
 
@@ -527,13 +236,13 @@ async function startServer() {
 
   // Endpoints: Health Check
   app.get("/api/health", async (req, res) => {
-    if (!dbFirestore) {
+    if (!supabase) {
       const offlineStatus = {
         configured: false,
         connected: false,
         status: "Modo Local Offline",
         table_active: false,
-        instructions: "O Firebase não está configurado. O sistema está salvando e operando localmente com total segurança."
+        instructions: "O Supabase não está configurado. O sistema está salvando e operando localmente com total segurança."
       };
       res.json({
         status: "ok",
@@ -544,23 +253,33 @@ async function startServer() {
       return;
     }
 
-    let firebaseStatus = "Sincronizado e Ativo";
-    let checkExplanation = "Tudo funcionando perfeitamente no Firebase.";
+    let supabaseStatus = "Sincronizado e Ativo";
+    let checkExplanation = "Tudo funcionando perfeitamente no Supabase.";
     let connectionActive = true;
 
     try {
-      // Test Firestore connection by doing a light query
-      await getDocs(query(collection(dbFirestore, "kel_app_store"), limit(1)));
+      const { error } = await supabase.from("kel_app_store").select("key").limit(1);
+      if (error) {
+        connectionActive = false;
+        supabaseStatus = "Instalação SQL Necessária";
+        checkExplanation = `A conexão com o Supabase foi bem-sucedida, mas a tabela 'kel_app_store' ainda não existe no seu projeto. Por favor, execute a seguinte consulta SQL no painel SQL Editor do seu Supabase:
+
+CREATE TABLE kel_app_store (
+  key text PRIMARY KEY,
+  val jsonb NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);`;
+      }
     } catch (err: any) {
       connectionActive = false;
-      firebaseStatus = "Erro de Conexão";
-      checkExplanation = `Erro de rede ou permissões insuficientes no Firebase: ${err.message || err}`;
+      supabaseStatus = "Erro de Conexão";
+      checkExplanation = `Erro de rede ou chaves inválidas no Supabase: ${err.message || err}`;
     }
 
     const activeStatus = {
       configured: true,
       connected: connectionActive,
-      status: firebaseStatus,
+      status: supabaseStatus,
       table_active: connectionActive,
       instructions: checkExplanation
     };
@@ -573,28 +292,21 @@ async function startServer() {
     });
   });
 
-  // Serve Firebase client config securely
-  app.get("/api/firebase-config", (req, res) => {
+  // Serve Supabase client config securely
+  app.get("/api/supabase-config", (req, res) => {
     try {
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        res.json({
-          apiKey: config.apiKey,
-          authDomain: config.authDomain,
-          projectId: config.projectId,
-          storageBucket: config.storageBucket,
-          messagingSenderId: config.messagingSenderId,
-          appId: config.appId,
-          measurementId: config.measurementId,
-          firestoreDatabaseId: config.firestoreDatabaseId
-        });
-      } else {
-        res.status(404).json({ error: "firebase-applet-config.json not found" });
-      }
+      res.json({
+        supabaseUrl: process.env.SUPABASE_URL || "",
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ""
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message || err });
     }
+  });
+
+  // Fallback endpoint for legacy requests
+  app.get("/api/firebase-config", (req, res) => {
+    res.json({ projectId: "", apiKey: "" });
   });
 
   // Get complete database state (sync pull)

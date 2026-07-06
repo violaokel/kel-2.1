@@ -1,352 +1,36 @@
 {
-  "products": [
-    {
-      "id": "prod-1",
-      "name": "Arroz Integral",
-      "barcode": "7891234567890",
-      "category": "Grãos e Cereais",
-      "quantity": 85,
-      "minQuantity": 20,
-      "unit": "kg",
-      "expiryDate": "2026-12-15",
-      "supplier": "Arroz do Sul S/A",
-      "location": "Despensa Secos A",
-      "wastage": 1.2
-    },
-    {
-      "id": "prod-2",
-      "name": "Feijão Carioca",
-      "barcode": "7891234567891",
-      "category": "Grãos e Cereais",
-      "quantity": 45,
-      "minQuantity": 15,
-      "unit": "kg",
-      "expiryDate": "2026-10-30",
-      "supplier": "Feijão Verde Alimentos",
-      "location": "Despensa Secos A",
-      "wastage": 0.5
-    },
-    {
-      "id": "prod-3",
-      "name": "Peito de Frango",
-      "barcode": "7891234567892",
-      "category": "Carnes e Frios",
-      "quantity": 32.5,
-      "minQuantity": 10,
-      "unit": "kg",
-      "expiryDate": "2026-07-20",
-      "supplier": "Frigorífico Kel Distribuidora",
-      "location": "Freezer Vertical 01",
-      "wastage": 0.8
-    },
-    {
-      "id": "prod-4",
-      "name": "Óleo de Soja",
-      "barcode": "7891234567893",
-      "category": "Óleos e Gorduras",
-      "quantity": 18,
-      "minQuantity": 5,
-      "unit": "litros",
-      "expiryDate": "2026-09-12",
-      "supplier": "Distribuidora Vale Verde",
-      "location": "Armário de Temperos",
-      "wastage": 0.1
-    },
-    {
-      "id": "prod-5",
-      "name": "Cebola",
-      "barcode": "7891234567894",
-      "category": "Hortifrúti",
-      "quantity": 12,
-      "minQuantity": 5,
-      "unit": "kg",
-      "expiryDate": "2026-06-18",
-      "supplier": "Horta Local e Cooperativa",
-      "location": "Caixa Plástica Geladeira 02",
-      "wastage": 2.1
-    },
-    {
-      "id": "prod-6",
-      "name": "Alho Triturado",
-      "barcode": "7891234567895",
-      "category": "Hortifrúti",
-      "quantity": 4.5,
-      "minQuantity": 2,
-      "unit": "kg",
-      "expiryDate": "2026-08-01",
-      "supplier": "Horta Local e Cooperativa",
-      "location": "Armário de Temperos",
-      "wastage": 0.05
-    },
-    {
-      "id": "prod-7",
-      "name": "Macarrão Parafuso",
-      "barcode": "7891234567896",
-      "category": "Grãos e Cereais",
-      "quantity": 60,
-      "minQuantity": 15,
-      "unit": "kg",
-      "expiryDate": "2026-11-20",
-      "supplier": "Arroz do Sul S/A",
-      "location": "Despensa Secos B",
-      "wastage": 0.3
-    },
-    {
-      "id": "prod-8",
-      "name": "Molho de Tomate",
-      "barcode": "7891234567897",
-      "category": "Enlatados",
-      "quantity": 24,
-      "minQuantity": 8,
-      "unit": "unidades",
-      "expiryDate": "2027-02-10",
-      "supplier": "Distribuidora Vale Verde",
-      "location": "Despensa Secos B",
-      "wastage": 0.1
-    },
-    {
-      "id": "prod-9",
-      "name": "Leite Integral UHT",
-      "barcode": "7891234567898",
-      "category": "Laticínios",
-      "quantity": 40,
-      "minQuantity": 12,
-      "unit": "litros",
-      "expiryDate": "2026-06-10",
-      "supplier": "Cooperativa de Laticínios Kel",
-      "location": "Geladeira Industrial 01",
-      "wastage": 0.2
-    },
-    {
-      "id": "prod-10",
-      "name": "Maçã Gala",
-      "barcode": "7891234567899",
-      "category": "Hortifrúti",
-      "quantity": 2.5,
-      "minQuantity": 8,
-      "unit": "kg",
-      "expiryDate": "2026-06-14",
-      "supplier": "Horta Local e Cooperativa",
-      "location": "Caixa Plástica Geladeira 02",
-      "wastage": 0.4
-    }
-  ],
-  "schoolMenus": [
-    {
-      "id": "menu-1",
-      "name": "Arroz, Feijão e Peito de Frango Grelhado",
-      "mealType": "almoco",
-      "date": "2026-06-06",
-      "ingredients": [
-        {
-          "productId": "prod-1",
-          "name": "Arroz Integral",
-          "quantityPerPortion": 0.08,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-2",
-          "name": "Feijão Carioca",
-          "quantityPerPortion": 0.05,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-3",
-          "name": "Peito de Frango",
-          "quantityPerPortion": 0.1,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-4",
-          "name": "Óleo de Soja",
-          "quantityPerPortion": 0.005,
-          "unit": "litros"
-        },
-        {
-          "productId": "prod-5",
-          "name": "Cebola",
-          "quantityPerPortion": 0.01,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-6",
-          "name": "Alho Triturado",
-          "quantityPerPortion": 0.002,
-          "unit": "kg"
-        }
-      ],
-      "portionsCount": 150,
-      "served": false
-    },
-    {
-      "id": "menu-2",
-      "name": "Macarronada de Frango ao Molho",
-      "mealType": "almoco",
-      "date": "2026-06-07",
-      "ingredients": [
-        {
-          "productId": "prod-7",
-          "name": "Macarrão Parafuso",
-          "quantityPerPortion": 0.09,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-3",
-          "name": "Peito de Frango",
-          "quantityPerPortion": 0.08,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-8",
-          "name": "Molho de Tomate",
-          "quantityPerPortion": 0.15,
-          "unit": "unidades"
-        },
-        {
-          "productId": "prod-4",
-          "name": "Óleo de Soja",
-          "quantityPerPortion": 0.005,
-          "unit": "litros"
-        },
-        {
-          "productId": "prod-5",
-          "name": "Cebola",
-          "quantityPerPortion": 0.01,
-          "unit": "kg"
-        },
-        {
-          "productId": "prod-6",
-          "name": "Alho Triturado",
-          "quantityPerPortion": 0.002,
-          "unit": "kg"
-        }
-      ],
-      "portionsCount": 120,
-      "served": false
-    },
-    {
-      "id": "menu-3",
-      "name": "Copo de Leite Integral e Fruta",
-      "mealType": "matutino",
-      "date": "2026-06-06",
-      "ingredients": [
-        {
-          "productId": "prod-9",
-          "name": "Leite Integral UHT",
-          "quantityPerPortion": 0.2,
-          "unit": "litros"
-        },
-        {
-          "productId": "prod-10",
-          "name": "Maçã Gala",
-          "quantityPerPortion": 0.12,
-          "unit": "kg"
-        }
-      ],
-      "portionsCount": 80,
-      "served": true
-    }
-  ],
-  "transactions": [
-    {
-      "id": "tx-1",
-      "productId": "prod-9",
-      "productName": "Leite Integral UHT",
-      "type": "entrada",
-      "quantity": 50,
-      "unit": "litros",
-      "date": "2026-06-05T09:30:00Z",
-      "user": "kel_admin",
-      "notes": "Entrada via Fornecedor - Lote de Laticínios"
-    },
-    {
-      "id": "tx-2",
-      "productId": "prod-9",
-      "productName": "Leite Integral UHT",
-      "type": "saida",
-      "quantity": 16,
-      "unit": "litros",
-      "date": "2026-06-06T07:15:00Z",
-      "user": "maria_merenda",
-      "notes": "Consumo automático - Copo de Leite Integral e Fruta (80 porções)"
-    },
-    {
-      "id": "tx-3",
-      "productId": "prod-10",
-      "productName": "Maçã Gala",
-      "type": "saida",
-      "quantity": 9.6,
-      "unit": "kg",
-      "date": "2026-06-06T07:15:00Z",
-      "user": "maria_merenda",
-      "notes": "Consumo automático - Copo de Leite Integral e Fruta (80 porções)"
-    },
-    {
-      "id": "tx-4",
-      "productId": "prod-10",
-      "productName": "Maçã Gala",
-      "type": "desperdicio",
-      "quantity": 0.4,
-      "unit": "kg",
-      "date": "2026-06-05T14:40:00Z",
-      "user": "kel_admin",
-      "notes": "Produto machucado e impróprio para consumo na triagem"
-    }
-  ],
-  "logs": [
-    {
-      "id": "log-1",
-      "timestamp": "2026-06-05T09:30:00.000Z",
-      "user": "kel_admin",
-      "role": "Administrador",
-      "action": "Entrada de Estoque",
-      "details": "Registrou entrada de 50.0 litros de Leite Integral UHT"
-    },
-    {
-      "id": "log-2",
-      "timestamp": "2026-06-05T14:42:00.000Z",
-      "user": "kel_admin",
-      "role": "Administrador",
-      "action": "Desperdício",
-      "details": "Registrou desperdício de 0.4 kg de Maçã Gala"
-    },
-    {
-      "id": "log-3",
-      "timestamp": "2026-06-06T07:15:00.000Z",
-      "user": "maria_merenda",
-      "role": "Merendeira",
-      "action": "Consumo de Cardápio",
-      "details": "Consumo automático do cardápio 'Copo de Leite Integral e Fruta'"
-    }
-  ],
+  "products": [],
+  "schoolMenus": [],
+  "transactions": [],
+  "logs": [],
   "userAccounts": [
     {
       "id": "usr-admin",
-      "username": "violaokel@gmail.com",
-      "password": "028089",
+      "name": "Kel Gestor",
       "role": "Administrador",
-      "name": "Kel Gestor"
+      "password": "028089",
+      "username": "violaokel@gmail.com"
     },
     {
       "id": "usr-merenda",
-      "username": "maria_coordenadora",
-      "password": "123456",
+      "name": "Maria Coordenadora",
       "role": "Coordenadora da Merenda Escolar",
-      "name": "Maria Coordenadora"
+      "password": "123456",
+      "username": "maria_coordenadora"
     },
     {
       "id": "usr-auxiliar",
-      "username": "joao_almoxarife",
-      "password": "123456",
+      "name": "João Almoxarife",
       "role": "Chefe de Almoxarifado",
-      "name": "João Almoxarife"
+      "password": "123456",
+      "username": "joao_almoxarife"
     },
     {
       "id": "usr-nutri",
-      "username": "ana_nutricionista",
-      "password": "123456",
+      "name": "Ana Nutricionista",
       "role": "Nutricionista",
-      "name": "Ana Nutricionista"
+      "password": "123456",
+      "username": "ana_nutricionista"
     }
   ]
 }
