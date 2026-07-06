@@ -6,31 +6,31 @@
   "userAccounts": [
     {
       "id": "usr-admin",
-      "name": "Kel Gestor",
-      "role": "Administrador",
+      "username": "violaokel@gmail.com",
       "password": "028089",
-      "username": "violaokel@gmail.com"
+      "role": "Administrador",
+      "name": "Kel Gestor"
     },
     {
       "id": "usr-merenda",
-      "name": "Maria Coordenadora",
-      "role": "Coordenadora da Merenda Escolar",
+      "username": "maria_coordenadora",
       "password": "123456",
-      "username": "maria_coordenadora"
+      "role": "Coordenadora da Merenda Escolar",
+      "name": "Maria Coordenadora"
     },
     {
       "id": "usr-auxiliar",
-      "name": "João Almoxarife",
-      "role": "Chefe de Almoxarifado",
+      "username": "joao_almoxarife",
       "password": "123456",
-      "username": "joao_almoxarife"
+      "role": "Chefe de Almoxarifado",
+      "name": "João Almoxarife"
     },
     {
       "id": "usr-nutri",
-      "name": "Ana Nutricionista",
-      "role": "Nutricionista",
+      "username": "ana_nutricionista",
       "password": "123456",
-      "username": "ana_nutricionista"
+      "role": "Nutricionista",
+      "name": "Ana Nutricionista"
     }
   ]
 }
