@@ -150,11 +150,14 @@ export default function MenuView({
       ];
     });
 
+    // Sort ingredients rows alphabetically by name (index 0)
+    const sortedRows = [...rows].sort((a, b) => a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }));
+
     printReport(
       `Ficha Técnica: ${menu.name}`,
       `Refeição agendada para ${formatBRDate(menu.date)} (${menu.mealType.toUpperCase()}) - Planejado para ${menu.portionsCount} estudantes`,
       headers,
-      rows
+      sortedRows
     );
   };
 

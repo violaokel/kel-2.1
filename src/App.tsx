@@ -12,7 +12,6 @@ import ScannerView from "./components/ScannerView";
 import AuditView from "./components/AuditView";
 import LoginView from "./components/LoginView";
 import UserManagementView from "./components/UserManagementView";
-import { getApiUrl } from "./utils/api";
 import { supabase } from "./lib/supabase";
 import { hashPassword } from "./utils/security";
 import { 
@@ -747,6 +746,77 @@ export default function App() {
     pushDataToServer(products, menus, transactions, logs, updated);
   };
 
+  const handleImportBackup = async (backupData: any): Promise<boolean> => {
+    let importedProds = products;
+    let importedMenus = menus;
+    let importedTxs = transactions;
+    let importedLogs = logs;
+    let importedUsers = userAccounts;
+
+    let hasChanges = false;
+
+    if (backupData && typeof backupData === "object") {
+      if (Array.isArray(backupData.products)) {
+        importedProds = backupData.products;
+        setProducts(importedProds);
+        localStorage.setItem("kel_products", JSON.stringify(importedProds));
+        hasChanges = true;
+      }
+      if (Array.isArray(backupData.schoolMenus)) {
+        importedMenus = backupData.schoolMenus;
+        setMenus(importedMenus);
+        localStorage.setItem("kel_school_menus", JSON.stringify(importedMenus));
+        hasChanges = true;
+      } else if (Array.isArray(backupData.menus)) {
+        importedMenus = backupData.menus;
+        setMenus(importedMenus);
+        localStorage.setItem("kel_school_menus", JSON.stringify(importedMenus));
+        hasChanges = true;
+      }
+      if (Array.isArray(backupData.transactions)) {
+        importedTxs = backupData.transactions;
+        setTransactions(importedTxs);
+        localStorage.setItem("kel_transactions", JSON.stringify(importedTxs));
+        hasChanges = true;
+      }
+      if (Array.isArray(backupData.logs)) {
+        importedLogs = backupData.logs;
+        setLogs(importedLogs);
+        localStorage.setItem("kel_logs", JSON.stringify(importedLogs));
+        hasChanges = true;
+      }
+      if (Array.isArray(backupData.userAccounts)) {
+        importedUsers = backupData.userAccounts;
+        setUserAccounts(importedUsers);
+        localStorage.setItem("kel_user_accounts", JSON.stringify(importedUsers));
+        hasChanges = true;
+      } else if (Array.isArray(backupData.user_accounts)) {
+        importedUsers = backupData.user_accounts;
+        setUserAccounts(importedUsers);
+        localStorage.setItem("kel_user_accounts", JSON.stringify(importedUsers));
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      const newLog: ActivityLog = {
+        id: "log-" + Date.now(),
+        timestamp: new Date().toISOString(),
+        user: currentUser?.username || "sistema",
+        role: currentUser?.role || "Administrador",
+        action: "Restauração de Backup",
+        details: "Banco de dados local e em nuvem restaurado via arquivo de backup JSON."
+      };
+      const finalLogs = [newLog, ...importedLogs];
+      setLogs(finalLogs);
+      localStorage.setItem("kel_logs", JSON.stringify(finalLogs));
+
+      await pushDataToServer(importedProds, importedMenus, importedTxs, finalLogs, importedUsers);
+      return true;
+    }
+    return false;
+  };
+
   const writeAuditLog = (username: string, role: string, action: string, details: string) => {
     const newLog: ActivityLog = {
       id: "log-" + Date.now(),
@@ -1268,6 +1338,7 @@ export default function App() {
                   "Senha/PIN administrador atualizado localmente neste dispositivo."
                 );
               }}
+              onImportBackup={handleImportBackup}
             />
           )}
 

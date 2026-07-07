@@ -12,6 +12,7 @@ import {
   ShieldAlert, 
   FileLock2, 
   Download, 
+  Upload,
   BarChart3, 
   Moon, 
   Sun, 
@@ -32,6 +33,7 @@ interface AuditViewProps {
   onSetDarkMode: (val: boolean) => void;
   onClearLogs: () => void;
   onUpdatePassword: (newPass: string) => void;
+  onImportBackup: (backupData: any) => Promise<boolean>;
 }
 
 export default function AuditView({
@@ -42,12 +44,14 @@ export default function AuditView({
   darkMode,
   onSetDarkMode,
   onClearLogs,
-  onUpdatePassword
+  onUpdatePassword,
+  onImportBackup
 }: AuditViewProps) {
   const [newPIN, setNewPIN] = useState("");
   const [pinChangeMsg, setPinChangeMsg] = useState("");
   const [backupDownloadedMsg, setBackupDownloadedMsg] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
+  const [importStatusMsg, setImportStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Supabase monitoring state
   const [supabaseStatus, setSupabaseStatus] = useState<any>(null);
@@ -136,6 +140,47 @@ export default function AuditView({
 
     setBackupDownloadedMsg(true);
     setTimeout(() => setBackupDownloadedMsg(false), 4000);
+  };
+
+  // Handle uploaded JSON file restore
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result;
+        if (typeof text !== "string") throw new Error("Falha ao ler o conteúdo do arquivo.");
+        
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object") {
+          throw new Error("Formato de JSON inválido.");
+        }
+
+        // Trigger backup restoring logic
+        const success = await onImportBackup(parsed);
+        if (success) {
+          setImportStatusMsg({
+            type: "success",
+            text: "✓ Backup JSON importado e sincronizado com o Supabase com sucesso!"
+          });
+        } else {
+          setImportStatusMsg({
+            type: "error",
+            text: "O backup fornecido não possui as chaves de dados necessárias (produtos, cardápios ou histórico)."
+          });
+        }
+      } catch (err: any) {
+        setImportStatusMsg({
+          type: "error",
+          text: `Erro ao importar JSON: ${err.message || "Formato de arquivo inválido"}`
+        });
+      }
+      setTimeout(() => setImportStatusMsg(null), 6000);
+    };
+
+    reader.readAsText(file);
   };
 
   return (
@@ -309,21 +354,60 @@ export default function AuditView({
               <p className="text-xs text-gray-500">Exporte os dados completos salvos no cache para restauração ou auditoria independente.</p>
             </div>
 
-            <button
-              onClick={downloadBackupJSON}
-              disabled={currentUser.role !== 'Administrador'}
-              id="btn-trigger-local-backup"
-              className="w-full py-2 px-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:bg-slate-100 disabled:text-gray-400 disabled:cursor-not-allowed transition rounded-xl text-xs font-bold flex items-center justify-center space-x-1 border border-emerald-200 disabled:border-slate-200"
-            >
-              <Download className="w-4 h-4" />
-              <span>Gerar Arquivo de Backup (.JSON)</span>
-            </button>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={downloadBackupJSON}
+                disabled={currentUser.role !== 'Administrador'}
+                id="btn-trigger-local-backup"
+                className="w-full py-2.5 px-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:bg-slate-100 disabled:text-gray-400 disabled:cursor-not-allowed transition rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 border border-emerald-200 disabled:border-slate-200"
+              >
+                <Download className="w-4.5 h-4.5" />
+                <span>Gerar Arquivo de Backup (.JSON)</span>
+              </button>
 
-            {backupDownloadedMsg && (
-              <p className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-[10px] text-emerald-700 font-semibold animate-pulse" style={{ contentVisibility: "auto" }}>
-                ✓ Arquivo baixado com sucesso! Salve em local seguro, pen-drive ou e-mail.
-              </p>
-            )}
+              {backupDownloadedMsg && (
+                <p className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-[10px] text-emerald-700 font-semibold animate-pulse" style={{ contentVisibility: "auto" }}>
+                  ✓ Arquivo baixado com sucesso! Salve em local seguro, pen-drive ou e-mail.
+                </p>
+              )}
+            </div>
+
+            {/* Restauração / Upload de Backup JSON */}
+            <div className="pt-3.5 border-t border-gray-100 space-y-2">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-bold text-gray-700 flex items-center">
+                  <Upload className="w-4 h-4 mr-1 text-emerald-600" />
+                  Restaurar Banco de Dados (.JSON)
+                </h4>
+                <p className="text-[10px] text-gray-400">
+                  Carregue um arquivo JSON de backup para restaurar produtos, cardápios e histórico no Supabase.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center justify-center space-x-2 w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-xl cursor-pointer transition text-xs font-semibold text-slate-700">
+                  <Upload className="w-4 h-4 text-slate-500" />
+                  <span>Selecionar arquivo de backup</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={currentUser.role !== 'Administrador'}
+                  />
+                </label>
+
+                {importStatusMsg && (
+                  <p className={`p-2.5 border rounded-xl text-[10px] leading-normal font-semibold ${
+                    importStatusMsg.type === "success" 
+                      ? "text-emerald-700 border-emerald-100 bg-emerald-50" 
+                      : "text-rose-700 border-rose-100 bg-rose-50"
+                  }`}>
+                    {importStatusMsg.text}
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Offline-online sync and Theme preset simulation toggle */}
             <div className="pt-3 border-t border-gray-100 flex items-center justify-between" id="theme-settings-row">

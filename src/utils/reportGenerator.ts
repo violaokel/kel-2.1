@@ -53,9 +53,10 @@ export function formatBRDateTime(dateStr: string): string {
  * Generates Excel-friendly CSV for complete stock listings
  */
 export function exportProductsCSV(products: Product[]) {
+  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
   let csv = "Código ID;Nome do Produto;Código de Barras;Categoria;Quantidade;Unidade;Mínimo Recomendado;Fornecedor;Localização;Desperdício Acumulado;Vencimento;Status\n";
   
-  products.forEach((p) => {
+  sortedProducts.forEach((p) => {
     const isLow = p.quantity <= p.minQuantity;
     const isExpired = new Date(p.expiryDate) < new Date();
     const status = isExpired ? "VENCIDO" : isLow ? "ESTOQUE BAIXO" : "NORMAL";
@@ -71,9 +72,10 @@ export function exportProductsCSV(products: Product[]) {
  */
 export function exportAlertsCSV(products: Product[]) {
   const today = new Date();
+  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
   let csv = "Produto;Código;Categoria;Quantidade Atual;Unidade;Mínimo;Validade;Alerta Ativo\n";
   
-  products.forEach((p) => {
+  sortedProducts.forEach((p) => {
     const isLow = p.quantity <= p.minQuantity;
     const isExpired = new Date(p.expiryDate) < today;
     const extDiff = new Date(p.expiryDate).getTime() - today.getTime();

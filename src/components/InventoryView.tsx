@@ -188,7 +188,7 @@ export default function InventoryView({
     }
 
     return matchesCategory && matchesStatus;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
 
   // Handle Add Product Submission
   const handleCreateProduct = (e: React.FormEvent) => {
