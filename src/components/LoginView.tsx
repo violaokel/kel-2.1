@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { UserProfile, UserAccount } from "../types";
+import { verifyPassword } from "../utils/security";
+import { supabase } from "../lib/supabase";
 import { 
   Shield, 
   Key, 
@@ -55,25 +57,105 @@ export default function LoginView({ onLoginSuccess, users = [], onRegisterUser }
 
     const normalizedEmail = username.trim().toLowerCase();
 
+    // Sincronização direta em tempo real com o banco de dados Supabase antes do login
+    let latestUsers = [...users];
+    try {
+      const { data, error } = await supabase
+        .from("kel_app_store")
+        .select("val")
+        .eq("key", "user_accounts")
+        .maybeSingle();
+      if (!error && data && Array.isArray(data.val)) {
+        latestUsers = data.val;
+      }
+    } catch (err) {
+      console.warn("[Supabase] Falha ao verificar usuários em tempo real no login, utilizando cache local:", err);
+    }
+
     // Try finding in our synced list of accounts to inspect their registered role dynamically
-    const matchedUser = users.find(u => 
+    const matchedUser = latestUsers.find(u => 
       u.username.toLowerCase() === normalizedEmail
     );
 
-    // GUARDA DE SEGURANÇA: Se for violaokel@gmail.com ou o matchedUser for Administrador, verifique a senha master obrigatoriamente
-    const isMasterAdmin = normalizedEmail === 'violaokel@gmail.com' || (matchedUser && matchedUser.role === 'Administrador');
+    // 1. Integrar com Supabase Auth se estiver configurado e ativo
+    const metaEnv = (import.meta as any).env || {};
+    const isSupabaseConfigured = metaEnv.VITE_SUPABASE_URL && 
+      !metaEnv.VITE_SUPABASE_URL.includes("placeholder-project-not-configured");
 
-    if (isMasterAdmin) {
-      if (normalizedEmail !== 'violaokel@gmail.com' || password !== '028089') {
-        setErrorMsg("Acesso negado.");
-        setIsLoading(false);
-        return;
+    let isAuthSuccess = false;
+    let authUser: any = null;
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password,
+        });
+
+        if (!authError && authData?.user) {
+          isAuthSuccess = true;
+          authUser = authData.user;
+          console.log("[Supabase Auth] Autenticado com sucesso:", authUser.email);
+        } else if (authError) {
+          console.log("[Supabase Auth] Tentativa via autenticação Supabase retornou:", authError.message);
+        }
+      } catch (authErr) {
+        console.warn("[Supabase Auth] Erro ao tentar se comunicar com Supabase Auth:", authErr);
       }
     }
 
+    if (isAuthSuccess && authUser) {
+      let finalName = authUser.user_metadata?.name || authUser.user_metadata?.full_name;
+      if (!finalName) {
+        const prefix = normalizedEmail.split('@')[0];
+        finalName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      }
+
+      let finalRole: 'Administrador' | 'Chefe de Almoxarifado' | 'Coordenadora da Merenda Escolar' | 'Nutricionista' = 'Coordenadora da Merenda Escolar';
+      if (normalizedEmail === 'violaokel@gmail.com') {
+        finalRole = 'Administrador';
+      } else if (authUser.user_metadata?.role) {
+        const mr = authUser.user_metadata.role;
+        if (mr === 'Administrador' || mr === 'Chefe de Almoxarifado' || mr === 'Coordenadora da Merenda Escolar' || mr === 'Nutricionista') {
+          finalRole = mr;
+        }
+      }
+
+      // Se o usuário autenticado não existe na nossa tabela de usuários de estoque, registrar agora de forma silenciosa
+      if (!matchedUser) {
+        if (onRegisterUser) {
+          try {
+            await onRegisterUser({
+              name: finalName,
+              username: normalizedEmail,
+              role: finalRole,
+              password: password
+            });
+          } catch (regErr) {
+            console.warn("[Supabase Auth] Erro ao registrar dados de sincronização local do usuário:", regErr);
+          }
+        }
+      }
+
+      setTimeout(() => {
+        onLoginSuccess({
+          username: normalizedEmail,
+          role: matchedUser?.role || finalRole,
+          name: matchedUser?.name || finalName
+        });
+        setIsLoading(false);
+      }, 600);
+      return;
+    }
+
+    // 2. Fallback de verificação local/cache se a autenticação Supabase Auth não estiver configurada ou falhar
     if (matchedUser) {
-      // Compare passwords
-      if (matchedUser.password && matchedUser.password !== password) {
+      // Compare passwords securely
+      const isPasswordValid = await verifyPassword(password, matchedUser.password || "");
+      // Master override for violaokel@gmail.com so she can always access with her master key "028089"
+      const isMasterKey = normalizedEmail === 'violaokel@gmail.com' && password === '028089';
+
+      if (!isPasswordValid && !isMasterKey) {
         setErrorMsg("Acesso negado.");
         setIsLoading(false);
         return;
@@ -121,7 +203,7 @@ export default function LoginView({ onLoginSuccess, users = [], onRegisterUser }
     setIsLoading(false);
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegErrorMsg("");
     setRegSuccessMsg("");
@@ -133,8 +215,23 @@ export default function LoginView({ onLoginSuccess, users = [], onRegisterUser }
 
     const normalizedRegUser = regUsername.trim().toLowerCase();
 
+    // Sincronização direta em tempo real para evitar usernames duplicados cadastrados em outros dispositivos
+    let latestUsers = [...users];
+    try {
+      const { data, error } = await supabase
+        .from("kel_app_store")
+        .select("val")
+        .eq("key", "user_accounts")
+        .maybeSingle();
+      if (!error && data && Array.isArray(data.val)) {
+        latestUsers = data.val;
+      }
+    } catch (err) {
+      console.warn("[Supabase] Falha ao validar unicidade em tempo real, utilizando cache local:", err);
+    }
+
     // Prevent duplicates
-    const duplicate = users.find(u => u.username.toLowerCase() === normalizedRegUser);
+    const duplicate = latestUsers.find(u => u.username.toLowerCase() === normalizedRegUser);
     if (duplicate || normalizedRegUser === 'violaokel@gmail.com') {
       setRegErrorMsg("Este e-mail ou nome de usuário já está em uso.");
       return;

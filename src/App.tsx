@@ -13,6 +13,8 @@ import AuditView from "./components/AuditView";
 import LoginView from "./components/LoginView";
 import UserManagementView from "./components/UserManagementView";
 import { getApiUrl } from "./utils/api";
+import { supabase } from "./lib/supabase";
+import { hashPassword } from "./utils/security";
 import { 
   LayoutDashboard, 
   Package, 
@@ -337,8 +339,8 @@ export default function App() {
 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [darkMode, setDarkMode] = useState<boolean>(false);
-  const [supabaseClient, setSupabaseClient] = useState<any>(null);
-  const [isSupabaseRealtime, setIsSupabaseRealtime] = useState<boolean>(false);
+  const [supabaseClient, setSupabaseClient] = useState<any>(supabase);
+  const [isSupabaseRealtime, setIsSupabaseRealtime] = useState<boolean>(true);
 
   // Pre-load saved or default data from local storage, then reconcile online database
   useEffect(() => {
@@ -406,17 +408,26 @@ export default function App() {
     }
   }, [userAccounts, isInitialized]);
 
-  // Try to sync with server
+  // Try to sync directly with Supabase
   const pullDataFromServer = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch(getApiUrl() + "/api/data");
-      if (res.ok) {
-        const cloudData = await res.json();
+      const { data, error } = await supabase.from("kel_app_store").select("*");
+      if (error) throw error;
+
+      if (data) {
+        const cloudData: any = {};
+        data.forEach((row: any) => {
+          if (row.key === "products" && Array.isArray(row.val)) cloudData.products = row.val;
+          if (row.key === "school_menus" && Array.isArray(row.val)) cloudData.schoolMenus = row.val;
+          if (row.key === "transactions" && Array.isArray(row.val)) cloudData.transactions = row.val;
+          if (row.key === "logs" && Array.isArray(row.val)) cloudData.logs = row.val;
+          if (row.key === "user_accounts" && Array.isArray(row.val)) cloudData.userAccounts = row.val;
+        });
         
         // Simple merge fallback using functional updates to prevent stale states
         // and only update when actual differences exist (prevents losing input focus during typing)
-        if (cloudData.products && cloudData.products.length > 0) {
+        if (Array.isArray(cloudData.products)) {
           setProducts(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(cloudData.products)) {
               return cloudData.products;
@@ -424,7 +435,7 @@ export default function App() {
             return prev;
           });
         }
-        if (cloudData.schoolMenus && cloudData.schoolMenus.length > 0) {
+        if (Array.isArray(cloudData.schoolMenus)) {
           setMenus(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(cloudData.schoolMenus)) {
               return cloudData.schoolMenus;
@@ -432,7 +443,7 @@ export default function App() {
             return prev;
           });
         }
-        if (cloudData.transactions && cloudData.transactions.length > 0) {
+        if (Array.isArray(cloudData.transactions)) {
           setTransactions(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(cloudData.transactions)) {
               return cloudData.transactions;
@@ -440,7 +451,7 @@ export default function App() {
             return prev;
           });
         }
-        if (cloudData.userAccounts && cloudData.userAccounts.length > 0) {
+        if (Array.isArray(cloudData.userAccounts)) {
           setUserAccounts(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(cloudData.userAccounts)) {
               return cloudData.userAccounts;
@@ -448,7 +459,7 @@ export default function App() {
             return prev;
           });
         }
-        if (cloudData.logs && cloudData.logs.length > 0) {
+        if (Array.isArray(cloudData.logs)) {
           setLogs(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(cloudData.logs)) {
               return cloudData.logs;
@@ -477,26 +488,10 @@ export default function App() {
 
     const initSupabaseRealtime = async () => {
       try {
-        const response = await fetch(getApiUrl() + "/api/supabase-config");
-        if (!response.ok) {
-          console.log("[Supabase Client] Não foi possível obter configurações do Supabase");
-          return;
-        }
-        const config = await response.json();
-        if (!config.supabaseUrl || !config.supabaseAnonKey) {
-          console.log("[Supabase Client] Configurações incompletas do Supabase");
-          return;
-        }
-
-        // Lazy load standard Supabase SDK browser-compatible methods
-        const { createClient } = await import("@supabase/supabase-js");
-
-        const client = createClient(config.supabaseUrl, config.supabaseAnonKey);
-        setSupabaseClient(client);
         setIsSupabaseRealtime(true);
         console.log("[Supabase Client] Conectado e escutando alterações via Supabase Realtime SDK.");
 
-        const channel = client
+        const channel = supabase
           .channel("schema-db-changes")
           .on(
             "postgres_changes",
@@ -607,78 +602,47 @@ export default function App() {
     setIsSyncing(true);
     let syncedSuccessfully = false;
 
-    // Try client-side direct Supabase sync first if available
-    if (supabaseClient && isSupabaseRealtime) {
-      try {
-        const payloads = [
-          { key: "products", val: currentProds },
-          { key: "school_menus", val: currentMenus },
-          { key: "transactions", val: currentTxs },
-          { key: "logs", val: currentLogs }
-        ];
-
-        if (currentUsers !== undefined) {
-          payloads.push({ key: "user_accounts", val: currentUsers });
-        }
-
-        const promises = payloads.map((payload) => 
-          supabaseClient.from("kel_app_store").upsert(payload, { onConflict: "key" })
-        );
-
-        const results = await Promise.all(promises);
-        const hasError = results.some((r: any) => r.error);
-
-        if (!hasError) {
-          syncedSuccessfully = true;
-          console.log("[Supabase Client] Sincronização direta enviada com sucesso.");
-        } else {
-          console.warn("[Supabase Client] Erro retornado ao salvar diretamente, usando API de fallback...");
-        }
-      } catch (err) {
-        console.warn("[Supabase Client] Falha no salvamento direto via Supabase Client. Utilizando API do servidor...", err);
-      }
-    }
-
     try {
-      const payload: any = {
-        products: currentProds,
-        schoolMenus: currentMenus,
-        transactions: currentTxs,
-        logs: currentLogs
-      };
+      const payloads = [
+        { key: "products", val: currentProds },
+        { key: "school_menus", val: currentMenus },
+        { key: "transactions", val: currentTxs },
+        { key: "logs", val: currentLogs }
+      ];
 
       if (currentUsers !== undefined) {
-        payload.userAccounts = currentUsers;
+        payloads.push({ key: "user_accounts", val: currentUsers });
+      } else {
+        payloads.push({ key: "user_accounts", val: userAccounts });
       }
 
-      const res = await fetch(getApiUrl() + "/api/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok || syncedSuccessfully) {
+      const promises = payloads.map((payload) => 
+        supabase.from("kel_app_store").upsert(payload, { onConflict: "key" })
+      );
+
+      const results = await Promise.all(promises);
+      const hasError = results.some((r: any) => r.error);
+
+      if (!hasError) {
+        syncedSuccessfully = true;
         setSyncStatus({
           isOnline: true,
           pendingSyncCount: 0,
           lastSyncedAt: new Date().toISOString()
         });
+        console.log("[Supabase Client] Sincronização direta enviada com sucesso.");
       } else {
-        throw new Error();
+        const firstError = results.find((r: any) => r.error)?.error;
+        console.warn("[Supabase Client] Erro retornado ao salvar diretamente:", firstError?.message);
+        throw new Error(firstError?.message);
       }
-    } catch {
-      if (syncedSuccessfully) {
-        setSyncStatus({
-          isOnline: true,
-          pendingSyncCount: 0,
-          lastSyncedAt: new Date().toISOString()
-        });
-      } else {
-        setSyncStatus(prev => ({
-          ...prev,
-          isOnline: false,
-          pendingSyncCount: prev.pendingSyncCount + 1
-        }));
-      }
+    } catch (err) {
+      console.warn("[Supabase Client] Falha no salvamento direto via Supabase Client.", err);
+      setSyncStatus(prev => ({
+        ...prev,
+        isOnline: false,
+        pendingSyncCount: prev.pendingSyncCount + 1
+      }));
     } finally {
       setIsSyncing(false);
     }
@@ -710,9 +674,11 @@ export default function App() {
     localStorage.removeItem("kel_logged_user");
   };
 
-  const handleAddUser = (newUsr: Omit<UserAccount, 'id'>) => {
+  const handleAddUser = async (newUsr: Omit<UserAccount, 'id'>) => {
+    const hashedPassword = newUsr.password ? await hashPassword(newUsr.password) : undefined;
     const fresh: UserAccount = {
       ...newUsr,
+      password: hashedPassword,
       id: "usr-" + Date.now()
     };
     const updated = [...userAccounts, fresh];
@@ -729,10 +695,14 @@ export default function App() {
     pushDataToServer(products, menus, transactions, logs, updated);
   };
 
-  const handleUpdateUser = (userId: string, updatedFields: Partial<UserAccount>) => {
+  const handleUpdateUser = async (userId: string, updatedFields: Partial<UserAccount>) => {
+    const fields = { ...updatedFields };
+    if (fields.password) {
+      fields.password = await hashPassword(fields.password);
+    }
     const updated = userAccounts.map(u => {
       if (u.id === userId) {
-        return { ...u, ...updatedFields };
+        return { ...u, ...fields };
       }
       return u;
     });
@@ -789,17 +759,16 @@ export default function App() {
 
     setLogs(prev => {
       const updated = [newLog, ...prev];
-      // Save directly
       localStorage.setItem("kel_logs", JSON.stringify(updated));
+      
+      // Save directly to Supabase in background
+      Promise.resolve(
+        supabase.from("kel_app_store")
+          .upsert({ key: "logs", val: updated }, { onConflict: "key" })
+      ).catch(err => console.warn("[Supabase Client] Erro de rede ao persistir log:", err));
+
       return updated;
     });
-
-    // Also push singly if server ready
-    fetch(getApiUrl() + "/api/logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newLog)
-    }).catch(() => {});
   };
 
   // 1. ADD DYNAMIC PRODUCT FROM PANEL
@@ -1032,43 +1001,40 @@ export default function App() {
 
   const handleRegisterUser = async (newUsr: Omit<UserAccount, 'id'>) => {
     try {
-      const res = await fetch(getApiUrl() + "/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUsr)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.user) {
-          setUserAccounts((prev) => {
-            const updated = [...prev, data.user];
-            localStorage.setItem("kel_user_accounts", JSON.stringify(updated));
-            return updated;
-          });
-          // Track and write audit
-          writeAuditLog(
-            data.user.username,
-            data.user.role,
-            "Autocadastro de Usuário",
-            `Novo colaborador "${data.user.name}" efetuou cadastro sob perfil "${data.user.role}".`
-          );
-        }
-      } else {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Erro ao registrar usuário.");
+      const cleanUser = newUsr.username.trim().toLowerCase();
+      
+      // Check for duplication
+      const duplicate = userAccounts.find(u => u.username.toLowerCase() === cleanUser);
+      if (duplicate || cleanUser === "violaokel@gmail.com") {
+        throw new Error("Este e-mail ou nome de usuário já está associado a outra conta.");
       }
-    } catch (err: any) {
-      console.error("Falha ao registrar online, registrando offline:", err);
-      // Fallback local registration if server offline
+
+      const hashedPassword = newUsr.password ? await hashPassword(newUsr.password) : undefined;
+
       const fresh: UserAccount = {
         ...newUsr,
+        username: cleanUser,
+        password: hashedPassword,
         id: "usr-" + Date.now()
       };
-      setUserAccounts((prev) => {
-        const updated = [...prev, fresh];
-        localStorage.setItem("kel_user_accounts", JSON.stringify(updated));
-        return updated;
-      });
+
+      const updated = [...userAccounts, fresh];
+      setUserAccounts(updated);
+      localStorage.setItem("kel_user_accounts", JSON.stringify(updated));
+
+      // Push updated accounts directly to Supabase
+      await pushDataToServer(products, menus, transactions, logs, updated);
+
+      writeAuditLog(
+        fresh.username,
+        fresh.role,
+        "Autocadastro de Usuário",
+        `Novo colaborador "${fresh.name}" efetuou cadastro sob perfil "${fresh.role}".`
+      );
+    } catch (err: any) {
+      console.error("Falha ao registrar usuário:", err);
+      alert(err.message || "Erro ao registrar usuário.");
+      throw err;
     }
   };
 

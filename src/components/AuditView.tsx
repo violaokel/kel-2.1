@@ -21,7 +21,7 @@ import {
   Award
 } from "lucide-react";
 import { downloadCSV, formatBRDateTime } from "../utils/reportGenerator";
-import { getApiUrl } from "../utils/api";
+import { supabase } from "../lib/supabase";
 
 interface AuditViewProps {
   logs: ActivityLog[];
@@ -54,16 +54,45 @@ export default function AuditView({
   const [loadingHealth, setLoadingHealth] = useState(true);
 
   React.useEffect(() => {
-    fetch(getApiUrl() + "/api/health")
-      .then(res => res.json())
-      .then(data => {
-        setSupabaseStatus(data.supabase || data.firebase);
-        setLoadingHealth(false);
-      })
-      .catch(err => {
+    const checkSupabaseHealth = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("kel_app_store")
+          .select("key")
+          .limit(1);
+
+        if (error) {
+          setSupabaseStatus({
+            configured: true,
+            connected: false,
+            status: "Erro de Conexão",
+            instructions: "Não foi possível comunicar com o banco de dados do Supabase: " + error.message,
+            table_active: false
+          });
+        } else {
+          setSupabaseStatus({
+            configured: true,
+            connected: true,
+            status: "Sincronizado e Ativo",
+            instructions: "Frontend conectado diretamente ao Supabase sem intermediários!",
+            table_active: true
+          });
+        }
+      } catch (err: any) {
         console.error("Erro ao ler integridade do Supabase:", err);
+        setSupabaseStatus({
+          configured: true,
+          connected: false,
+          status: "Erro Fatal",
+          instructions: "Erro interno ao instanciar ou conectar com o Supabase: " + (err.message || err),
+          table_active: false
+        });
+      } finally {
         setLoadingHealth(false);
-      });
+      }
+    };
+
+    checkSupabaseHealth();
   }, []);
 
   // Grouped category wastage tracker for graph representation
