@@ -19,7 +19,12 @@ import {
   TrendingDown, 
   History,
   Activity,
-  Award
+  Award,
+  FolderOpen,
+  HelpCircle,
+  Smartphone,
+  Laptop,
+  Info
 } from "lucide-react";
 import { downloadCSV, formatBRDateTime } from "../utils/reportGenerator";
 import { supabase } from "../lib/supabase";
@@ -52,6 +57,7 @@ export default function AuditView({
   const [backupDownloadedMsg, setBackupDownloadedMsg] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [importStatusMsg, setImportStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeHelpTab, setActiveHelpTab] = useState<"android" | "ios" | "pc" | "crypt">("android");
 
   // Supabase monitoring state
   const [supabaseStatus, setSupabaseStatus] = useState<any>(null);
@@ -405,6 +411,129 @@ export default function AuditView({
                   }`}>
                     {importStatusMsg.text}
                   </p>
+                )}
+              </div>
+            </div>
+
+            {/* Guia de Acesso aos Arquivos e Correção do .crypt14 */}
+            <div className="pt-3.5 border-t border-gray-100 space-y-3" id="help-files-guide">
+              <div className="flex items-center space-x-1.5">
+                <HelpCircle className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold text-gray-700">Guia: Como Encontrar e Usar seu Arquivo</h4>
+              </div>
+              
+              <div className="flex flex-wrap gap-1 border-b border-gray-100 pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveHelpTab("android")}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-lg transition ${
+                    activeHelpTab === "android" 
+                      ? "bg-emerald-50 text-emerald-700" 
+                      : "text-gray-500 hover:bg-slate-50"
+                  }`}
+                >
+                  Android
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveHelpTab("ios")}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-lg transition ${
+                    activeHelpTab === "ios" 
+                      ? "bg-emerald-50 text-emerald-700" 
+                      : "text-gray-500 hover:bg-slate-50"
+                  }`}
+                >
+                  iPhone (iOS)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveHelpTab("pc")}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-lg transition ${
+                    activeHelpTab === "pc" 
+                      ? "bg-emerald-50 text-emerald-700" 
+                      : "text-gray-500 hover:bg-slate-50"
+                  }`}
+                >
+                  Computador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveHelpTab("crypt")}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-lg transition ${
+                    activeHelpTab === "crypt" 
+                      ? "bg-rose-50 text-rose-700 font-bold border border-rose-200" 
+                      : "text-gray-500 hover:bg-slate-50"
+                  }`}
+                >
+                  O que é .crypt14?
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] text-gray-600 space-y-2 leading-relaxed">
+                {activeHelpTab === "android" && (
+                  <>
+                    <p className="font-bold text-slate-800 flex items-center">
+                      <Smartphone className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                      Como localizar no celular Android:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-gray-500 text-[10px]">
+                      <li>Abra o aplicativo de arquivos do celular (como <b>Files do Google</b> ou <b>Meus Arquivos</b>).</li>
+                      <li>Toque na categoria ou pasta de <b>Downloads</b>.</li>
+                      <li>Busque pelo arquivo que começa com <code className="bg-white px-1 border rounded text-emerald-700">backup_data_</code> e termina com <code className="bg-white px-1 border rounded text-emerald-700">.json</code>.</li>
+                      <li>Se o seu navegador baixou como <code className="bg-white px-1 border rounded text-rose-600">.json.txt</code>, basta renomear e apagar o <code className="text-rose-600">.txt</code> do final.</li>
+                    </ol>
+                  </>
+                )}
+
+                {activeHelpTab === "ios" && (
+                  <>
+                    <p className="font-bold text-slate-800 flex items-center">
+                      <Smartphone className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                      Como localizar no iPhone / iPad:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-gray-500 text-[10px]">
+                      <li>Abra o aplicativo nativo <b>Arquivos</b> (ícone de pasta azul).</li>
+                      <li>Vá na aba <b>Explorar</b> na parte inferior.</li>
+                      <li>Toque na pasta <b>Downloads</b> (dentro de "No meu iPhone" ou "iCloud Drive").</li>
+                      <li>Selecione o arquivo de backup com extensão <code className="bg-white px-1 border rounded text-indigo-700">.json</code>.</li>
+                    </ol>
+                  </>
+                )}
+
+                {activeHelpTab === "pc" && (
+                  <>
+                    <p className="font-bold text-slate-800 flex items-center">
+                      <Laptop className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                      No Computador (Windows / Mac / Linux):
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-gray-500 text-[10px]">
+                      <li><b>Atalho rápido:</b> No navegador, pressione <kbd className="bg-white px-1 border rounded">Ctrl + J</kbd> (Windows) ou <kbd className="bg-white px-1 border rounded">Cmd + Option + L</kbd> (Mac) para ver e abrir a pasta de downloads.</li>
+                      <li>Normalmente, o arquivo é salvo na pasta padrão do sistema chamada <b>Downloads</b>.</li>
+                    </ul>
+                  </>
+                )}
+
+                {activeHelpTab === "crypt" && (
+                  <>
+                    <p className="font-bold text-rose-800 flex items-center">
+                      <Info className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                      Por que terminou em ".json.crypt14"?
+                    </p>
+                    <p className="text-gray-600 text-[10px]">
+                      A extensão <code className="bg-rose-50 text-rose-700 px-1 border border-rose-100 rounded font-semibold">.crypt14</code> é um formato de criptografia proprietário gerado pelo aplicativo do <b>WhatsApp no Android</b> para proteger as bases de dados de mensagens locais.
+                    </p>
+                    <p className="text-gray-600 text-[10px]">
+                      <b>O que aconteceu:</b> Ao salvar, compartilhar ou enviar o arquivo JSON pelo WhatsApp de um celular para o outro, o WhatsApp do Android o criptografou para proteção local automática.
+                    </p>
+                    <p className="text-gray-600 font-semibold text-slate-700 text-[10px]">
+                      💡 Como resolver para importar o arquivo de volta:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-gray-500 text-[10px]">
+                      <li>Acesse a pasta original de <b>Downloads</b> do celular gerador do backup (via gerenciador de arquivos).</li>
+                      <li>O arquivo original está lá com a terminação pura em <code className="text-emerald-700 font-bold">.json</code>.</li>
+                      <li><b>Não compartilhe pelo WhatsApp diretamente</b>. Em vez disso, envie o arquivo original por <b>E-mail</b> (como anexo comum), faça upload para o <b>Google Drive</b> ou envie usando cabo USB para o computador.</li>
+                    </ol>
+                  </>
                 )}
               </div>
             </div>
