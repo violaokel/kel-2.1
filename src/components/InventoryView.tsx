@@ -21,7 +21,8 @@ import {
   AlertTriangle,
   Barcode,
   X,
-  Sparkles
+  Sparkles,
+  Edit
 } from "lucide-react";
 import { 
   exportProductsCSV, 
@@ -40,6 +41,7 @@ interface InventoryViewProps {
   onAddProduct: (prod: Omit<Product, 'id' | 'wastage'>) => void;
   onUpdateQuantity: (productId: string, quantityChange: number, type: 'entrada' | 'saida' | 'desperdicio', notes: string) => void;
   onDeleteProduct: (productId: string) => void;
+  onEditProduct: (prod: Product) => void;
 }
 
 export default function InventoryView({
@@ -50,7 +52,8 @@ export default function InventoryView({
   logs = [],
   onAddProduct,
   onUpdateQuantity,
-  onDeleteProduct
+  onDeleteProduct,
+  onEditProduct
 }: InventoryViewProps) {
   // Filters & State
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,6 +78,18 @@ export default function InventoryView({
   const [newExpiryDate, setNewExpiryDate] = useState("2026-12-31");
   const [newSupplier, setNewSupplier] = useState("");
   const [newLocation, setNewLocation] = useState("Despensa Secos A");
+
+  // Edit product form states
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBarcode, setEditBarcode] = useState("");
+  const [editCategory, setEditCategory] = useState("Grãos e Cereais");
+  const [editMinQuantity, setEditMinQuantity] = useState<number>(5);
+  const [editUnit, setEditUnit] = useState("kg");
+  const [editExpiryDate, setEditExpiryDate] = useState("");
+  const [editSupplier, setEditSupplier] = useState("");
+  const [editLocation, setEditLocation] = useState("");
 
   // AI Purchase Suggestion states
   const [isAISuggestLoading, setIsAISuggestLoading] = useState(false);
@@ -214,6 +229,41 @@ export default function InventoryView({
     setNewMinQuantity(5);
     setNewSupplier("");
     setIsAddOpen(false);
+  };
+
+  // Trigger Edit Product Modal
+  const triggerEditProduct = (prod: Product) => {
+    setEditingProduct(prod);
+    setEditName(prod.name);
+    setEditBarcode(prod.barcode || "");
+    setEditCategory(prod.category);
+    setEditMinQuantity(prod.minQuantity);
+    setEditUnit(prod.unit);
+    setEditExpiryDate(prod.expiryDate);
+    setEditSupplier(prod.supplier || "");
+    setEditLocation(prod.location || "");
+    setIsEditOpen(true);
+  };
+
+  // Submit Edited Product Changes
+  const handleUpdateProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !editName.trim()) return;
+
+    onEditProduct({
+      ...editingProduct,
+      name: editName,
+      barcode: editBarcode,
+      category: editCategory,
+      minQuantity: Number(editMinQuantity) || 0,
+      unit: editUnit,
+      expiryDate: editExpiryDate,
+      supplier: editSupplier || "Fornecedor Escolar Padrão",
+      location: editLocation || "Depósito Geral"
+    });
+
+    setIsEditOpen(false);
+    setEditingProduct(null);
   };
 
   // Submit Quantity shift (movement adjustment)
@@ -586,6 +636,16 @@ export default function InventoryView({
                   >
                     <TrendingDown className="w-3.5 h-3.5" />
                   </button>
+
+                  {currentUser.role === 'Administrador' && (
+                    <button
+                      onClick={() => triggerEditProduct(p)}
+                      className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 rounded-lg transition"
+                      title="Editar Produto"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {currentUser.role === 'Administrador' ? (
                     confirmDeleteId === p.id ? (
@@ -1236,6 +1296,166 @@ export default function InventoryView({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PRODUCT */}
+      {isEditOpen && editingProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="modal-edit-product">
+          <div className="bg-white rounded-3xl border border-gray-100 max-w-md w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={() => {
+                setIsEditOpen(false);
+                setEditingProduct(null);
+              }}
+              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="font-bold text-gray-900 text-base mb-1">✏️ Editar Insumo Escolar</h3>
+            <p className="text-xs text-gray-500 mb-4">Atualize as informações do produto conforme necessário.</p>
+
+            <form onSubmit={handleUpdateProductSubmit} className="space-y-4" id="form-edit-product">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Nome do Ingrediente ou Produto *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Arroz Agulhinha Tipo 1"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Código de Barras</label>
+                  <input
+                    type="text"
+                    placeholder="EAN-13 numérico"
+                    value={editBarcode}
+                    onChange={(e) => setEditBarcode(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Categoria</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="Grãos e Cereais">Grãos e Cereais</option>
+                    <option value="Carnes e Frios">Carnes e Frios</option>
+                    <option value="Laticínios">Laticínios</option>
+                    <option value="Hortifrúti">Hortifrúti</option>
+                    <option value="Óleos e Gorduras">Óleos e Gorduras</option>
+                    <option value="Enlatados">Enlatados</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Estoque Atual</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editingProduct.quantity}
+                    disabled
+                    className="w-full px-3 py-2 bg-slate-100 border border-gray-200 rounded-xl text-xs text-gray-400 font-mono outline-none cursor-not-allowed"
+                    title="Para alterar a quantidade, utilize os botões de Entrada / Saída ou Desperdício"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Mín Segurança</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editMinQuantity}
+                    onChange={(e) => setEditMinQuantity(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Unidade</label>
+                  <select
+                    value={editUnit}
+                    onChange={(e) => setEditUnit(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="g">g</option>
+                    <option value="L">L</option>
+                    <option value="ml">ml</option>
+                    <option value="unidades">unidades</option>
+                    <option value="pacotes">pacotes</option>
+                    <option value="latas">latas</option>
+                    <option value="caixas">caixas</option>
+                    <option value="garrafas">garrafas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de Validade</label>
+                  <input
+                    type="date"
+                    required
+                    value={editExpiryDate}
+                    onChange={(e) => setEditExpiryDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 font-sans focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Fornecedor / Distribuidor</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Nutrindo Alimentos S/A"
+                    value={editSupplier}
+                    onChange={(e) => setEditSupplier(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Localização no Almoxarifado</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Prateleira B3 ou Geladeira 1"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditOpen(false);
+                    setEditingProduct(null);
+                  }}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-gray-650 font-bold rounded-xl text-xs transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-sm transition"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

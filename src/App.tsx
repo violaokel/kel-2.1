@@ -864,6 +864,23 @@ export default function App() {
     pushDataToServer(updated, menus, transactions, logs);
   };
 
+  // 1b. EDIT PRODUCT FROM PANEL
+  const handleEditProduct = (updatedProduct: Product) => {
+    const updated = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+    setProducts(updated);
+
+    if (currentUser) {
+      writeAuditLog(
+        currentUser.username,
+        currentUser.role,
+        "Edição de Produto",
+        `Editou informações do insumo: "${updatedProduct.name}".`
+      );
+    }
+
+    pushDataToServer(updated, menus, transactions, logs);
+  };
+
   // 2. DELETE PRODUCT
   const handleDeleteProduct = (productId: string) => {
     const prodName = products.find(p => p.id === productId)?.name || "";
@@ -1299,6 +1316,7 @@ export default function App() {
               onAddProduct={handleAddProduct}
               onUpdateQuantity={handleUpdateProductQuantity}
               onDeleteProduct={handleDeleteProduct}
+              onEditProduct={handleEditProduct}
             />
           )}
 
